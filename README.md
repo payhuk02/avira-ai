@@ -17,6 +17,26 @@ Copiez `.env.example` vers `.env` et renseignez votre projet Supabase (`SUPABASE
 
 Scripts : `bun run build`, `bun run lint`, `bun run typecheck`, `bun run preview`.
 
+## Déploiement Vercel
+
+Dans **Project → Settings → Environment Variables**, ajoutez (Production + Preview) :
+
+| Variable | Description |
+|----------|-------------|
+| `VITE_SUPABASE_URL` | `https://…supabase.co` (embeddée au build client) |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | clé `sb_publishable_…` |
+| `VITE_SUPABASE_PROJECT_ID` | id projet |
+| `SUPABASE_URL` | même URL (SSR / server functions) |
+| `SUPABASE_PUBLISHABLE_KEY` | même clé publishable |
+| `SUPABASE_PROJECT_ID` | même id |
+| `SUPABASE_SERVICE_ROLE_KEY` | clé `sb_secret_…` (serveur uniquement) |
+
+Puis **Redeploy** (les `VITE_*` ne sont prises en compte qu’au build).
+
+Dans Supabase → Authentication → URL Configuration, ajoutez :
+- Site URL : `https://avira-ai-seven.vercel.app`
+- Redirect URLs : `https://avira-ai-seven.vercel.app/**` et `http://localhost:5173/**`
+
 ## Admin
 
 Après la première inscription :

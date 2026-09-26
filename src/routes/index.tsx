@@ -1,8 +1,6 @@
 ﻿import { createFileRoute, Link } from "@tanstack/react-router";
 import { FORMATS, SKIN_TONES } from "@/lib/studio";
 import heroStill from "@/assets/hero-still.jpg";
-import heroVideo from "@/assets/hero-video.mp4.asset.json";
-import heroVideoWebm from "@/assets/hero-video.webm.asset.json";
 import format169 from "@/assets/format-169.jpg";
 import format916 from "@/assets/format-916.jpg";
 import format11 from "@/assets/format-11.jpg";
@@ -224,19 +222,13 @@ function Landing() {
                   </span>
                 </div>
                 <div className="relative overflow-hidden rounded-[10px]">
-                  <video
-                    poster={heroStill}
-                    autoPlay
-                    muted
-                    loop
-                    playsInline
-                    preload="metadata"
+                  <img
+                    src={heroStill}
+                    alt="Rendu Avira ai : humains réels en action dans une rue au crépuscule"
+                    width={1280}
+                    height={720}
                     className="block aspect-[16/9] w-full object-cover"
-                    aria-label="Rendu vidéo Avira ai : humains réels en action dans une rue au crépuscule"
-                  >
-                    <source src={heroVideoWebm.url} type="video/webm" />
-                    <source src={heroVideo.url} type="video/mp4" />
-                  </video>
+                  />
                   <span className="absolute bottom-3 left-3 rounded-full bg-black/80 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-white backdrop-blur-sm">
                     16:9 · Cinéma
                   </span>
