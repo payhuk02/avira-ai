@@ -56,7 +56,9 @@ export async function runwayCreate(
     try {
       const j = JSON.parse(text) as { error?: string; message?: string };
       msg = j.error ?? j.message ?? msg;
-    } catch {}
+    } catch {
+      /* ignore */
+    }
     console.error("runway create failed", res.status, text.slice(0, 300));
     return { error: msg, status: res.status };
   }

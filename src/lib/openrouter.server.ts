@@ -78,7 +78,9 @@ export async function openrouterVideoCreate(
     try {
       const j = JSON.parse(text) as { error?: { message?: string } | string };
       msg = (typeof j.error === "string" ? j.error : j.error?.message) ?? msg;
-    } catch {}
+    } catch {
+      /* ignore */
+    }
     if (r.status === 402) msg = "Toutes les clés OpenRouter sont à court de crédits pour les modèles choisis.";
     console.error("openrouter video create failed", r.status, text.slice(0, 300));
     return { error: msg, status: r.status };

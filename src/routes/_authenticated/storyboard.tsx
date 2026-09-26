@@ -48,7 +48,9 @@ function StoryboardPage() {
     const conf = FORMATS.find((f) => f.id === board.format) ?? FORMATS[0]!;
     const key = `avira-cart-${user.id}`;
     let cart: unknown[] = [];
-    try { cart = JSON.parse(localStorage.getItem(key) ?? "[]"); } catch {}
+    try { cart = JSON.parse(localStorage.getItem(key) ?? "[]"); } catch {
+      /* ignore corrupt cart */
+    }
     const items = board.scenes.map((sc) => {
       const duration = Math.min(10, Math.max(5, sc.duration));
       const scene = `${board.title} — ${sc.number}. ${sc.title}`.slice(0, 2000);

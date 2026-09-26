@@ -119,7 +119,9 @@ async function startClip(data: z.infer<typeof clipInput>, context: { supabase: a
       if (!res.ok) {
         const body = await res.text();
         let msg: string | undefined;
-        try { msg = (JSON.parse(body) as { error?: { message?: string } }).error?.message; } catch {}
+        try { msg = (JSON.parse(body) as { error?: { message?: string } }).error?.message; } catch {
+          /* ignore invalid JSON */
+        }
         console.error("google video create failed", res.status, body.slice(0, 300));
         return { error: gatewayMessage(res.status, msg), clip: null };
       }
@@ -155,7 +157,9 @@ async function startClip(data: z.infer<typeof clipInput>, context: { supabase: a
         try {
           const parsed = JSON.parse(body) as { message?: string; error?: { message?: string } };
           safeMessage = parsed.message ?? parsed.error?.message;
-        } catch {}
+        } catch {
+          /* ignore invalid JSON */
+        }
         console.error("video create failed", res.status);
         return { error: gatewayMessage(res.status, safeMessage), clip: null };
       }

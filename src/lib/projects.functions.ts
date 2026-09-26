@@ -153,7 +153,9 @@ export const generateVoiceover = createServerFn({ method: "POST" })
       try {
         const p = JSON.parse(body) as { message?: string; error?: { message?: string } };
         msg = p.message ?? p.error?.message;
-      } catch {}
+      } catch {
+        /* ignore invalid JSON */
+      }
       console.error("tts failed", res.status, body.slice(0, 200));
       return { error: gatewayMessage(res.status, msg), audio: null };
     }

@@ -101,7 +101,9 @@ function Montage() {
       const saved = JSON.parse(sessionStorage.getItem("avira-montage-selection") ?? "[]");
       if (Array.isArray(saved) && saved.length) setOrder(saved);
       sessionStorage.removeItem("avira-montage-selection");
-    } catch {}
+    } catch {
+      /* ignore corrupt session selection */
+    }
   }, []);
   const [transition, setTransition] = useState<Transition>("fade");
   const [state, setState] = useState<"idle" | "preview" | "export">("idle");
@@ -244,10 +246,16 @@ function Montage() {
         }
       }
     } catch (e) {
-      recorder?.state === "recording" && recorder.stop();
+      if (recorder?.state === "recording") recorder.stop();
       setError((e as Error).message);
     } finally {
-      sources.forEach((n) => { try { n.stop(); } catch {} });
+      sources.forEach((n) => {
+        try {
+          n.stop();
+        } catch {
+          /* ignore stop errors */
+        }
+      });
       audio.close();
       setState("idle");
     }

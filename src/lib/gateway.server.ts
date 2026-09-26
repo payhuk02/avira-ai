@@ -95,7 +95,9 @@ export async function textModel(cfg: GatewayConfig) {
         const { openrouterRotate } = await import("./openrouter.server");
         let body: Record<string, unknown> | null = null;
         if (init?.body && typeof init.body === "string") {
-          try { body = JSON.parse(init.body); } catch {}
+          try { body = JSON.parse(init.body); } catch {
+            /* ignore invalid JSON */
+          }
         }
         if (!body) return fetch(input, init);
         if (body["max_tokens"] == null && body["max_completion_tokens"] == null) body["max_tokens"] = 4000;
