@@ -27,6 +27,7 @@ CREATE TABLE public.app_config (
 GRANT ALL ON public.app_config TO service_role;
 ALTER TABLE public.app_config ENABLE ROW LEVEL SECURITY;
 
-INSERT INTO public.user_roles (user_id, role)
-SELECT id, 'admin'::public.app_role FROM auth.users WHERE lower(email) = 'acostm3500@gmail.com'
-ON CONFLICT DO NOTHING;
+-- Admin bootstrap: run after first signup (replace email):
+-- INSERT INTO public.user_roles (user_id, role)
+-- SELECT id, 'admin'::public.app_role FROM auth.users WHERE lower(email) = 'votre@email.com'
+-- ON CONFLICT DO NOTHING;

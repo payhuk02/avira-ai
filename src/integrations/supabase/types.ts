@@ -157,6 +157,30 @@ export type Database = {
         }
         Relationships: []
       }
+      usage_counters: {
+        Row: {
+          subject_id: string
+          day: string
+          kind: string
+          count: number
+          updated_at: string
+        }
+        Insert: {
+          subject_id: string
+          day: string
+          kind: string
+          count?: number
+          updated_at?: string
+        }
+        Update: {
+          subject_id?: string
+          day?: string
+          kind?: string
+          count?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       storyboards: {
         Row: {
           created_at: string

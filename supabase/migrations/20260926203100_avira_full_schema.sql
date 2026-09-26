@@ -126,10 +126,23 @@ GRANT ALL ON public.admin_audit_log TO service_role;
 ALTER TABLE public.admin_audit_log ENABLE ROW LEVEL SECURITY;
 CREATE INDEX IF NOT EXISTS admin_audit_log_created_idx ON public.admin_audit_log (created_at DESC);
 
--- Bootstrap admin (si le compte existe déjà)
-INSERT INTO public.user_roles (user_id, role)
-SELECT id, 'admin'::public.app_role FROM auth.users WHERE lower(email) = 'acostm3500@gmail.com'
-ON CONFLICT DO NOTHING;
+-- Bootstrap admin after first signup (replace email):
+-- INSERT INTO public.user_roles (user_id, role)
+-- SELECT id, 'admin'::public.app_role FROM auth.users WHERE lower(email) = 'votre@email.com'
+-- ON CONFLICT DO NOTHING;
+
+-- ========== usage_counters ==========
+CREATE TABLE IF NOT EXISTS public.usage_counters (
+  subject_id text NOT NULL,
+  day date NOT NULL,
+  kind text NOT NULL CHECK (kind IN ('assist', 'voiceover', 'share')),
+  count int NOT NULL DEFAULT 0 CHECK (count >= 0),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (subject_id, day, kind)
+);
+GRANT ALL ON public.usage_counters TO service_role;
+ALTER TABLE public.usage_counters ENABLE ROW LEVEL SECURITY;
+CREATE INDEX IF NOT EXISTS usage_counters_day_idx ON public.usage_counters (day DESC);
 
 -- ========== Storage RLS ==========
 DO $$ BEGIN CREATE POLICY "own videos read" ON storage.objects FOR SELECT TO authenticated USING (bucket_id = 'videos' AND (storage.foldername(name))[1] = auth.uid()::text); EXCEPTION WHEN duplicate_object THEN NULL; END $$;

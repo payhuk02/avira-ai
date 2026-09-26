@@ -76,6 +76,16 @@ export const setClipSharing = createServerFn({ method: "POST" })
 export const getSharedClip = createServerFn({ method: "GET" })
   .inputValidator((d) => z.object({ token: z.string().min(16).max(40).regex(/^[A-Za-z0-9_-]+$/) }).parse(d))
   .handler(async ({ data }) => {
+    const { hitRateLimit, pruneRateLimits } = await import("./rate-limit.server");
+    pruneRateLimits();
+    // 30 req / min / token (mémoire instance) + plafond journalier DB
+    if (!hitRateLimit(`share:${data.token}`, 30, 60_000)) return null;
+    try {
+      const { assertShareAllowed } = await import("./limits.server");
+      await assertShareAllowed(data.token);
+    } catch {
+      return null;
+    }
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: clip } = await supabaseAdmin
       .from("clips")

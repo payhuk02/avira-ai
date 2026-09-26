@@ -1,3 +1,7 @@
+/**
+ * Compteurs d'usage et quotas plateforme.
+ * Table `usage_counters` : service_role uniquement (voir migrations Supabase).
+ */
 import type { GatewayConfig } from "./gateway.server";
 import { getGatewayConfig, requireGeneration } from "./gateway.server";
 
@@ -55,6 +59,10 @@ function dayStartIso() {
   return d.toISOString();
 }
 
+function todayUtcDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function monthStartIso() {
   return new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
 }
@@ -87,28 +95,50 @@ async function countToday(userId: string, table: "clips" | "storyboards"): Promi
   return count ?? 0;
 }
 
-/** Soft counters for assist / voiceover stored in app_config (no dedicated table). */
-async function bumpSoftCounter(userId: string, kind: "assist" | "voiceover"): Promise<number> {
+async function counterToday(subjectId: string, kind: "assist" | "voiceover" | "share"): Promise<number> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const day = new Date().toISOString().slice(0, 10);
-  const key = `usage_${kind}_${day}_${userId}`;
-  const { data } = await supabaseAdmin.from("app_config").select("value").eq("key", key).maybeSingle();
-  const next = (data?.value ? Number(data.value) : 0) + 1;
-  await supabaseAdmin.from("app_config").upsert({
-    key,
-    value: String(next),
-    is_secret: false,
-    updated_at: new Date().toISOString(),
-  });
-  return next;
+  const { data, error } = await supabaseAdmin
+    .from("usage_counters")
+    .select("count")
+    .eq("subject_id", subjectId)
+    .eq("day", todayUtcDate())
+    .eq("kind", kind)
+    .maybeSingle();
+  if (error) {
+    // Table pas encore migrée : fallback app_config temporaire
+    if (error.code === "PGRST205" || /usage_counters/i.test(error.message)) {
+      const key = `usage_${kind}_${todayUtcDate()}_${subjectId}`;
+      const { data: row } = await supabaseAdmin.from("app_config").select("value").eq("key", key).maybeSingle();
+      return row?.value ? Number(row.value) : 0;
+    }
+    throw new Error(error.message);
+  }
+  return data?.count ?? 0;
 }
 
-async function softCountToday(userId: string, kind: "assist" | "voiceover"): Promise<number> {
+async function bumpCounter(subjectId: string, kind: "assist" | "voiceover" | "share"): Promise<number> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const day = new Date().toISOString().slice(0, 10);
-  const key = `usage_${kind}_${day}_${userId}`;
-  const { data } = await supabaseAdmin.from("app_config").select("value").eq("key", key).maybeSingle();
-  return data?.value ? Number(data.value) : 0;
+  const day = todayUtcDate();
+  const current = await counterToday(subjectId, kind);
+  const next = current + 1;
+  const { error } = await supabaseAdmin.from("usage_counters").upsert(
+    { subject_id: subjectId, day, kind, count: next, updated_at: new Date().toISOString() },
+    { onConflict: "subject_id,day,kind" },
+  );
+  if (error) {
+    if (error.code === "PGRST205" || /usage_counters/i.test(error.message)) {
+      const key = `usage_${kind}_${day}_${subjectId}`;
+      await supabaseAdmin.from("app_config").upsert({
+        key,
+        value: String(next),
+        is_secret: false,
+        updated_at: new Date().toISOString(),
+      });
+      return next;
+    }
+    throw new Error(error.message);
+  }
+  return next;
 }
 
 /**
@@ -140,21 +170,29 @@ export async function assertUsageAllowed(userId: string, kind: UsageKind): Promi
     }
   } else if (kind === "assist") {
     if (limits.dailyAssistLimit <= 0) throw new Error("Les assistants IA sont désactivés.");
-    const n = await softCountToday(userId, "assist");
+    const n = await counterToday(userId, "assist");
     if (n >= limits.dailyAssistLimit) {
       throw new Error(`Quota journalier atteint (${limits.dailyAssistLimit} aides IA / jour). Réessayez demain.`);
     }
-    await bumpSoftCounter(userId, "assist");
+    await bumpCounter(userId, "assist");
   } else if (kind === "voiceover") {
     if (limits.dailyVoiceoverLimit <= 0) throw new Error("La voix off IA est désactivée.");
-    const n = await softCountToday(userId, "voiceover");
+    const n = await counterToday(userId, "voiceover");
     if (n >= limits.dailyVoiceoverLimit) {
       throw new Error(`Quota journalier atteint (${limits.dailyVoiceoverLimit} voix off / jour). Réessayez demain.`);
     }
-    await bumpSoftCounter(userId, "voiceover");
+    await bumpCounter(userId, "voiceover");
   }
 
   return cfg;
+}
+
+/** Limite les lectures de liens de partage (anti-scrape). */
+export async function assertShareAllowed(token: string, dailyCap = 200) {
+  const subject = `share:${token.slice(0, 24)}`;
+  const n = await counterToday(subject, "share");
+  if (n >= dailyCap) throw new Error("Trop de consultations pour ce lien aujourd'hui.");
+  await bumpCounter(subject, "share");
 }
 
 export async function getPublicStudioLimits() {
