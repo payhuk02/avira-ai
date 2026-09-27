@@ -203,9 +203,9 @@ export const adminDeleteStoryboard = createServerFn({ method: "POST" })
 const KEYS = [
   { name: "LOVABLE_API_KEY", label: "Passerelle IA Lovable", usage: "Utilisée par défaut si aucune clé directe n'est définie" },
   { name: "OPENAI_API_KEY", label: "OpenAI (GPT)", usage: "Storyboards et analyses IA — prioritaire sur la passerelle" },
-  { name: "OPENROUTER_API_KEY", label: "OpenRouter", usage: "Storyboards et assistants IA — prioritaire sur OpenAI et la passerelle" },
-  { name: "RUNWAY_API_KEY", label: "Runway Dev", usage: "Génération vidéo — prioritaire sur Google et la passerelle" },
-  { name: "GOOGLE_API_KEY", label: "Google (Gemini / Veo)", usage: "Génération vidéo — prioritaire sur la passerelle" },
+  { name: "OPENROUTER_API_KEY", label: "OpenRouter", usage: "Texte + vidéo (modèle vidéo par défaut Seedance mini) — prioritaire" },
+  { name: "RUNWAY_API_KEY", label: "Runway Dev", usage: "Génération vidéo — utilisée si OpenRouter vidéo est désactivé" },
+  { name: "GOOGLE_API_KEY", label: "Google (Gemini / Veo)", usage: "Génération vidéo — utilisée si OpenRouter / Runway absents" },
 ] as const;
 type KeyName = (typeof KEYS)[number]["name"];
 

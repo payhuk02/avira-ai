@@ -128,7 +128,13 @@ async function startClip(data: z.infer<typeof clipInput>, context: { supabase: a
       const op = (await res.json()) as { name: string };
       jobId = `google:${op.name}`;
     } else {
-      if (!cfg.apiKey) return { error: "Aucune clé configurée pour la vidéo.", clip: null };
+      if (!cfg.apiKey) {
+        return {
+          error:
+            "Aucune clé vidéo configurée. Avec OpenRouter : choisissez un modèle vidéo dans Admin → Paramètres, ou ajoutez une clé Runway / Google / Lovable.",
+          clip: null,
+        };
+      }
       const res = await fetch(`${GATEWAY}/videos`, {
         method: "POST",
         headers: { Authorization: `Bearer ${cfg.apiKey}`, "Content-Type": "application/json" },

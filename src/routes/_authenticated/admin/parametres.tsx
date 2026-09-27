@@ -85,7 +85,7 @@ function SettingsPage() {
         <Label>Modèle vidéo OpenRouter · {orVideo.length} modèles</Label>
         <select className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
           value={s.openrouterVideoModel} onChange={(e) => setS({ ...s, openrouterVideoModel: e.target.value })}>
-          <option value="">Désactivé (utiliser Runway / Google / passerelle)</option>
+          <option value="">Défaut Seedance mini (si clé OpenRouter)</option>
           {orVideo.map((m) => (
             <option key={m.id} value={m.id}>{m.id} · {Math.min(...m.durations)}–{Math.max(...m.durations)} s · {m.resolutions.join(", ")}</option>
           ))}

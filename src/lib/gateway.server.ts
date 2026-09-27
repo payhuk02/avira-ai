@@ -4,6 +4,7 @@ export const DEFAULT_VIDEO_MODEL = "google/gemini-omni-1.1-flash";
 export const DEFAULT_TEXT_MODEL = "openai/gpt-6-astra";
 export const OPENROUTER_API = "https://openrouter.ai/api/v1";
 export const DEFAULT_OPENROUTER_MODEL = "openai/gpt-5-mini";
+export const DEFAULT_OPENROUTER_VIDEO_MODEL = "bytedance/seedance-2.0-mini";
 export const DEFAULT_OPENAI_MODEL = "gpt-5-mini";
 export const DEFAULT_GOOGLE_VIDEO_MODEL = "veo-3.1-generate-preview";
 export const DEFAULT_RUNWAY_VIDEO_MODEL = "gen4.5";
@@ -65,7 +66,9 @@ export async function getGatewayConfig(): Promise<GatewayConfig> {
     openrouterFallbackModels: splitList(c["openrouter_fallback_models"]),
     openrouterVideoFallbacks: splitList(c["openrouter_video_fallbacks"]),
     openrouterModel: c["openrouter_model"] || DEFAULT_OPENROUTER_MODEL,
-    openrouterVideoModel: c["openrouter_video_model"] || "",
+    // With an OpenRouter key, default to a video model so clips work without Admin → Paramètres.
+    openrouterVideoModel:
+      c["openrouter_video_model"] || (openrouterKey ? DEFAULT_OPENROUTER_VIDEO_MODEL : ""),
     runwayVideoModel: c["runway_video_model"] || DEFAULT_RUNWAY_VIDEO_MODEL,
     videoModel: c["video_model"] || DEFAULT_VIDEO_MODEL,
     textModel: c["text_model"] || DEFAULT_TEXT_MODEL,
