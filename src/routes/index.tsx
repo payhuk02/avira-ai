@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { FORMATS, SKIN_TONES } from "@/lib/studio";
-import heroStill from "@/assets/hero-still.jpg";
+import heroVideo from "@/assets/hero-real-action.mp4.asset.json";
 import format169 from "@/assets/format-169.jpg";
 import format916 from "@/assets/format-916.jpg";
 import format11 from "@/assets/format-11.jpg";
@@ -223,11 +223,15 @@ function Landing() {
                   </span>
                 </div>
                 <div className="relative overflow-hidden rounded-[10px]">
-                  <img
-                    src={heroStill}
-                    alt={`Rendu ${BRAND} : humains réels en action dans une rue au crépuscule`}
-                    width={1280}
-                    height={720}
+                  <video
+                    src={heroVideo.url}
+                    aria-label={`Rendu ${BRAND} : équipe de tournage et acteurs réels en action`}
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    preload="metadata"
+                    disablePictureInPicture
                     className="block aspect-[16/9] w-full object-cover"
                   />
                   <span className="absolute bottom-3 left-3 rounded-full bg-black/80 px-2.5 py-1 font-mono text-[10px] uppercase tracking-wider text-white backdrop-blur-sm">
