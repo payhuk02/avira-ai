@@ -10,7 +10,7 @@ export const runwayHeaders = (key: string) => ({
 const TARGET: Record<string, number> = { "360p": 360, "720p": 720, "1080p": 1080, "4k": 2160 };
 
 /** Statuses where another model or key may still succeed. */
-const RUNWAY_RETRY = new Set([404, 412, 429]);
+const RUNWAY_RETRY = new Set([400, 404, 412, 429]);
 /** Key unusable for the rest of this rotate. */
 const RUNWAY_KEY_DEAD = new Set([401, 403]);
 
@@ -40,7 +40,7 @@ function pickResolution(m: RunwayModel, resolution: string): string | undefined 
   const idx = lower.indexOf(want.toLowerCase());
   if (idx >= 0) return m.resolutions[idx];
   if (want === "720p" || want === "1080p") {
-    const mid = lower.findIndex((r) => r === "768p" || r === "720p");
+    const mid = lower.findIndex((r) => r === "768p" || r === "720p" || r === "2k");
     if (mid >= 0) return m.resolutions[mid];
   }
   if (want === "360p" || want === "480p") {
@@ -106,18 +106,33 @@ export async function runwayCreate(
   const text = await res.text();
   if (!res.ok) {
     let msg = "La génération Runway a échoué.";
+    let issues: Array<{ path?: (string | number)[]; message?: string }> = [];
     try {
-      const j = JSON.parse(text) as { error?: string; message?: string };
+      const j = JSON.parse(text) as {
+        error?: string;
+        message?: string;
+        issues?: Array<{ path?: (string | number)[]; message?: string }>;
+      };
       msg = j.error ?? j.message ?? msg;
+      issues = j.issues ?? [];
     } catch {
       /* ignore */
     }
+    const issueHint = issues
+      .map((i) => `${(i.path ?? []).join(".") || "?"}: ${i.message ?? ""}`.trim())
+      .filter(Boolean)
+      .slice(0, 3)
+      .join(" · ");
     // 412 = not enough credits for this model/task — another cheaper model or key may still work.
     const noCredits = res.status === 412 || /enough credits|insufficient credit/i.test(msg);
     if (noCredits) {
       msg = `Crédits Runway insuffisants pour ${m.id}. Rechargez sur dev.runwayml.com, ou la cascade essaie un autre modèle / provider.`;
+    } else if (res.status === 400 || /validation of body failed/i.test(msg)) {
+      msg = issueHint
+        ? `Paramètres Runway invalides (${m.id}) — ${issueHint}`
+        : `Paramètres Runway invalides pour ${m.id}. Essai d'un autre modèle…`;
     }
-    console.error("runway create failed", m.id, res.status, text.slice(0, 300));
+    console.error("runway create failed", m.id, res.status, text.slice(0, 400));
     return { error: msg, status: noCredits ? 412 : res.status };
   }
   return { id: (JSON.parse(text) as { id: string }).id };
@@ -125,7 +140,7 @@ export async function runwayCreate(
 
 /**
  * Outer loop = models, inner = keys (like OpenRouter).
- * 412/404/429 → try next key then next model. 401/403 → mark key dead.
+ * 400/404/412/429 → try next key then next model. 401/403 → mark key dead.
  */
 export async function runwayCreateRotating(
   keys: string[],

@@ -62,8 +62,9 @@ export const createClip = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => startClip(data, context));
 
 /** Statuses that mean "this provider has no usable credit / quota / auth" → try the next one.
- * 412 = Runway Dev "You do not have enough credits to run this task." */
-const PROVIDER_EXHAUSTED = new Set([401, 402, 403, 412, 429]);
+ * 412 = Runway Dev "You do not have enough credits to run this task."
+ * 400 = model-specific body validation — another provider may accept the same clip. */
+const PROVIDER_EXHAUSTED = new Set([400, 401, 402, 403, 412, 429]);
 
 type ClipGenOpts = {
   prompt: string;

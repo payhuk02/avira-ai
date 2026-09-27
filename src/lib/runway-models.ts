@@ -155,7 +155,7 @@ export const RUNWAY_MODELS: RunwayModel[] = [
     min: 5,
     max: 15,
     ratios: HAILUO_ASPECT,
-    resolutions: ["768p", "2k"],
+    resolutions: ["768P", "2K"],
     maxPrompt: 6000,
   },
   {
