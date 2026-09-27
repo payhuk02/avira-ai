@@ -9,6 +9,8 @@ import format45 from "@/assets/format-45.jpg";
 import { ArrowUp, Instagram, Linkedin, Mail, Youtube } from "lucide-react";
 import { BRAND, BRAND_CONTACT } from "@/lib/brand";
 
+const HERO_VIDEO_URL = `https://acostudio-ai.lovable.app${heroVideo.url}`;
+
 /** Adresse de contact affichée en pied de page — remplacez-la par la vôtre. */
 const CONTACT_EMAIL = BRAND_CONTACT;
 
@@ -224,7 +226,7 @@ function Landing() {
                 </div>
                 <div className="relative overflow-hidden rounded-[10px]">
                   <video
-                    src={heroVideo.url}
+                    src={HERO_VIDEO_URL}
                     aria-label={`Rendu ${BRAND} : équipe de tournage et acteurs réels en action`}
                     autoPlay
                     muted
