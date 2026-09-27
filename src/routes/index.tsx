@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { FORMATS, SKIN_TONES } from "@/lib/studio";
-import heroVideo from "@/assets/hero-real-action.mp4.asset.json";
+import heroVideo from "@/assets/hero-real-action.webm.asset.json";
 import format169 from "@/assets/format-169.jpg";
 import format916 from "@/assets/format-916.jpg";
 import format11 from "@/assets/format-11.jpg";
