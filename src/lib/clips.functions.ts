@@ -59,8 +59,9 @@ export const createClip = createServerFn({ method: "POST" })
   .inputValidator((d) => clipInput.parse(d))
   .handler(async ({ data, context }) => startClip(data, context));
 
-/** Statuses that mean "this provider has no usable credit / quota / auth" → try the next one. */
-const PROVIDER_EXHAUSTED = new Set([401, 402, 403, 429]);
+/** Statuses that mean "this provider has no usable credit / quota / auth" → try the next one.
+ * 412 = Runway Dev "You do not have enough credits to run this task." */
+const PROVIDER_EXHAUSTED = new Set([401, 402, 403, 412, 429]);
 
 type ClipGenOpts = {
   prompt: string;
@@ -87,8 +88,9 @@ async function tryRunwayVideo(cfg: GatewayCfg, opts: ClipGenOpts): Promise<{ job
     const r = await runwayCreate(cfg.runwayKey, model, opts);
     if (!("error" in r)) return { jobId: `runway:${r.id}` };
     last = { status: r.status, error: r.error };
-    // Same org key: 401/402/403 won't succeed on another model — cascade to next provider.
-    if (r.status === 401 || r.status === 402 || r.status === 403) break;
+    // Same org key: auth/billing won't succeed on another model — cascade to next provider.
+    // 412 = Runway insufficient credits (not 402).
+    if (r.status === 401 || r.status === 402 || r.status === 403 || r.status === 412) break;
     if (!PROVIDER_EXHAUSTED.has(r.status) && r.status !== 404) break;
     console.warn("runway model failed, trying next", model, r.status);
   }

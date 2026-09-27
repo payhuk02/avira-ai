@@ -99,8 +99,13 @@ export async function runwayCreate(
     } catch {
       /* ignore */
     }
+    // Runway returns 412 (not 402) when the org has no credits.
+    const noCredits = res.status === 412 || /enough credits|insufficient credit/i.test(msg);
+    if (noCredits) {
+      msg = "Crédits Runway épuisés. Rechargez sur dev.runwayml.com, ou la cascade basculera vers Kling / Lovable.";
+    }
     console.error("runway create failed", res.status, text.slice(0, 300));
-    return { error: msg, status: res.status };
+    return { error: msg, status: noCredits ? 412 : res.status };
   }
   return { id: (JSON.parse(text) as { id: string }).id };
 }
