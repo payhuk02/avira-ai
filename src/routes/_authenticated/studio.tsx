@@ -36,6 +36,7 @@ import {
   refreshClip,
   type ClipRow,
 } from "@/lib/clips.functions";
+import { getStudioLimits } from "@/lib/admin.functions";
 
 const searchSchema = z.object({
   scene: z.string().max(4000).optional(),
@@ -85,6 +86,8 @@ function Studio() {
   const refresh = useServerFn(refreshClip);
   const list = useServerFn(listClips);
   const getDownload = useServerFn(getClipDownloadUrl);
+  const loadLimits = useServerFn(getStudioLimits);
+  const [aiConfigured, setAiConfigured] = useState(true);
   const [scene, setScene] = useState(
     search.scene ??
       "Une femme de 35 ans marche dans une rue de Lyon au crépuscule, plan moyen qui glisse latéralement, ambiance contemplative.",
@@ -156,6 +159,16 @@ function Studio() {
       })
       .catch(() => {});
   }, [user, list]);
+
+  useEffect(() => {
+    if (!user) {
+      setAiConfigured(true);
+      return;
+    }
+    loadLimits()
+      .then((limits) => setAiConfigured(limits.aiConfigured !== false))
+      .catch(() => {});
+  }, [user, loadLimits]);
 
   const poll = useCallback(
     (id: string) => {
@@ -464,6 +477,18 @@ function Studio() {
                   Scène {String(clips.length + 1).padStart(2, "0")}
                 </span>
               </div>
+              {!aiConfigured ? (
+                <div className="mt-4 rounded-[10px] bg-destructive/10 px-4 py-3 text-sm text-destructive ring-1 ring-destructive/30">
+                  <p className="font-medium">Aucune clé IA configurée</p>
+                  <p className="mt-1 text-destructive/90">
+                    Ajoutez une clé (Lovable, OpenRouter, Runway ou Google) dans{" "}
+                    <Link to="/admin/cles-api" className="underline underline-offset-2 hover:text-destructive">
+                      Admin → Clés API
+                    </Link>{" "}
+                    ou via les variables d’environnement Vercel, puis redéployez.
+                  </p>
+                </div>
+              ) : null}
               <div className="mt-4">
                 <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60">Modèles prêts à l'emploi</p>
                 <div className="flex gap-2 overflow-x-auto pb-1">
@@ -658,7 +683,7 @@ function Studio() {
               ) : (
               <button
                 onClick={generate}
-                disabled={busy || !scene.trim()}
+                disabled={busy || !scene.trim() || !aiConfigured}
                 className="group inline-flex items-center gap-2.5 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground ring-1 ring-primary/40 transition-colors hover:bg-primary-deep hover:text-primary-foreground disabled:opacity-50"
               >
                 <span className="grid size-4 place-items-center">

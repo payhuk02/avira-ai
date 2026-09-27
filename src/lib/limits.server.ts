@@ -196,12 +196,25 @@ export async function assertShareAllowed(token: string, dailyCap = 200) {
 }
 
 export async function getPublicStudioLimits() {
-  const [c, limits] = await Promise.all([getGatewayConfig(), getUsageLimits()]);
+  const { hasAiProviderKeys } = await import("./gateway.server");
+  const [limits, aiConfigured] = await Promise.all([getUsageLimits(), hasAiProviderKeys()]);
+  if (!aiConfigured) {
+    return {
+      maxDuration: 10,
+      generationEnabled: false,
+      allowedResolutions: ["360p", "720p", "1080p", "4k"],
+      dailyClipLimit: limits.dailyClipLimit,
+      dailyStoryboardLimit: limits.dailyStoryboardLimit,
+      aiConfigured: false as const,
+    };
+  }
+  const c = await getGatewayConfig();
   return {
     maxDuration: Math.min(10, Math.max(5, c.maxDuration)),
     generationEnabled: c.generationEnabled,
     allowedResolutions: c.allowedResolutions,
     dailyClipLimit: limits.dailyClipLimit,
     dailyStoryboardLimit: limits.dailyStoryboardLimit,
+    aiConfigured: true as const,
   };
 }

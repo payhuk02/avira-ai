@@ -50,7 +50,11 @@ export async function getGatewayConfig(): Promise<GatewayConfig> {
     ...new Set([c["OPENROUTER_API_KEY"] || process.env["OPENROUTER_API_KEY"] || "", ...splitList(c["OPENROUTER_API_KEYS"])].filter(Boolean)),
   ].slice(0, 101);
   const openrouterKey = openrouterKeys[0] ?? null;
-  if (!apiKey && !openrouterKey && !openaiKey && !googleKey && !runwayKey) throw new Error("Le service de génération n'est pas configuré.");
+  if (!apiKey && !openrouterKey && !openaiKey && !googleKey && !runwayKey) {
+    throw new Error(
+      "Aucune clé IA configurée. Ouvrez Administration → Clés API (OpenRouter, Runway, Google ou Lovable), ou ajoutez LOVABLE_API_KEY / OPENROUTER_API_KEY / RUNWAY_API_KEY / GOOGLE_API_KEY dans Vercel.",
+    );
+  }
   return {
     apiKey,
     openaiKey,
@@ -80,6 +84,16 @@ export async function requireGeneration() {
   if (!cfg.generationEnabled)
     throw new Error("La génération est momentanément suspendue (maintenance).");
   return cfg;
+}
+
+/** True if at least one video/text provider key is available (env or app_config). */
+export async function hasAiProviderKeys(): Promise<boolean> {
+  try {
+    await getGatewayConfig();
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** Text model: OpenRouter, then direct OpenAI when an OpenAI key is set, otherwise Lovable AI Gateway. */
