@@ -205,7 +205,7 @@ const KEYS = [
   { name: "OPENAI_API_KEY", label: "OpenAI (GPT)", usage: "Storyboards et analyses IA — prioritaire sur la passerelle" },
   { name: "OPENROUTER_API_KEY", label: "OpenRouter", usage: "Texte + vidéo (modèle vidéo par défaut Seedance mini) — prioritaire" },
   { name: "RUNWAY_API_KEY", label: "Runway Dev", usage: "Génération vidéo — utilisée si OpenRouter vidéo est désactivé" },
-  { name: "GOOGLE_API_KEY", label: "Google (Gemini / Veo)", usage: "Génération vidéo — utilisée si OpenRouter / Runway absents" },
+  { name: "GOOGLE_API_KEY", label: "Google (Gemini / Veo)", usage: "Vidéo Veo (Lite/Fast/standard) — essayé en premier dans la cascade providers" },
 ] as const;
 type KeyName = (typeof KEYS)[number]["name"];
 

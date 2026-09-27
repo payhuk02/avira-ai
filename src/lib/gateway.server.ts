@@ -22,7 +22,11 @@ export const DEFAULT_OPENROUTER_VIDEO_FALLBACKS = [
   "kwaivgi/kling-v3.0-pro",
 ];
 export const DEFAULT_OPENAI_MODEL = "gpt-5-mini";
-export const DEFAULT_GOOGLE_VIDEO_MODEL = "veo-3.1-generate-preview";
+export const DEFAULT_GOOGLE_VIDEO_MODEL = "veo-3.1-lite-generate-preview";
+export const DEFAULT_GOOGLE_VIDEO_FALLBACKS = [
+  "veo-3.1-fast-generate-preview",
+  "veo-3.1-generate-preview",
+];
 export const DEFAULT_RUNWAY_VIDEO_MODEL = "gen4.5";
 
 export type GatewayConfig = {
@@ -37,6 +41,7 @@ export type GatewayConfig = {
   openrouterModel: string;
   openrouterVideoModel: string;
   runwayVideoModel: string;
+  googleVideoFallbacks: string[];
   videoModel: string;
   textModel: string;
   openaiModel: string;
@@ -94,6 +99,11 @@ export async function getGatewayConfig(): Promise<GatewayConfig> {
     textModel: c["text_model"] || DEFAULT_TEXT_MODEL,
     openaiModel: c["openai_model"] || DEFAULT_OPENAI_MODEL,
     googleVideoModel: c["google_video_model"] || DEFAULT_GOOGLE_VIDEO_MODEL,
+    googleVideoFallbacks: (() => {
+      const configured = splitList(c["google_video_fallbacks"]);
+      if (configured.length) return configured;
+      return googleKey ? DEFAULT_GOOGLE_VIDEO_FALLBACKS : [];
+    })(),
     maxDuration: Number(c["max_duration"]) || 60,
     generationEnabled: c["generation_enabled"] !== "false",
     allowedResolutions: c["allowed_resolutions"]

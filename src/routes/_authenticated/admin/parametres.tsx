@@ -93,8 +93,19 @@ function SettingsPage() {
         <p className="text-xs text-muted-foreground">Si choisi et clé OpenRouter définie, prioritaire pour la génération vidéo.</p>
       </div>
       <div className="space-y-2">
-        <Label>Modèle vidéo Google (si clé Google définie)</Label>
-        <Input value={s.googleVideoModel} onChange={(e) => setS({ ...s, googleVideoModel: e.target.value })} />
+        <Label>Modèle vidéo Google (Veo — si clé Google définie)</Label>
+        <select
+          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+          value={s.googleVideoModel}
+          onChange={(e) => setS({ ...s, googleVideoModel: e.target.value })}
+        >
+          <option value="veo-3.1-lite-generate-preview">Veo 3.1 Lite · veo-3.1-lite-generate-preview</option>
+          <option value="veo-3.1-fast-generate-preview">Veo 3.1 Fast · veo-3.1-fast-generate-preview</option>
+          <option value="veo-3.1-generate-preview">Veo 3.1 · veo-3.1-generate-preview</option>
+        </select>
+        <p className="text-xs text-muted-foreground">
+          En cas de quota épuisé, le serveur essaie automatiquement Lite → Fast → standard.
+        </p>
       </div>
       <div className="space-y-2">
         <Label>Modèle GPT OpenAI (si clé OpenAI définie)</Label>

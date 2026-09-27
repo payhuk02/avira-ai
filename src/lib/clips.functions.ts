@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { runwayCreate, runwayFetch } from "./runway.server";
 import { openrouterVideoCreate, openrouterVideoFetch } from "./openrouter.server";
-import { GATEWAY, GOOGLE_API, gatewayMessage, getGatewayConfig } from "./gateway.server";
+import { GATEWAY, GOOGLE_API, gatewayMessage, getGatewayConfig, DEFAULT_GOOGLE_VIDEO_MODEL, DEFAULT_GOOGLE_VIDEO_FALLBACKS } from "./gateway.server";
 import { assertUsageAllowed } from "./limits.server";
 
 export type ClipRow = {
@@ -108,7 +108,14 @@ async function tryGoogleVideo(cfg: GatewayCfg, opts: ClipGenOpts): Promise<{ job
   const dur = opts.duration <= 5 ? 4 : opts.duration <= 7 ? 6 : 8;
   const resolution = opts.resolution === "1080p" || opts.resolution === "4k" ? "1080p" : "720p";
   const primary = cfg.googleVideoModel.replace(/^google\//, "");
-  const models = [...new Set([primary, "veo-3.1-fast-generate-preview", "veo-3.1-generate-preview"])];
+  const models = [
+    ...new Set([
+      primary,
+      ...cfg.googleVideoFallbacks.map((m) => m.replace(/^google\//, "")),
+      ...DEFAULT_GOOGLE_VIDEO_FALLBACKS,
+      DEFAULT_GOOGLE_VIDEO_MODEL,
+    ]),
+  ];
   let last: { status: number; error: string } | null = null;
   for (const model of models) {
     const res = await fetch(`${GOOGLE_API}/models/${model}:predictLongRunning`, {
