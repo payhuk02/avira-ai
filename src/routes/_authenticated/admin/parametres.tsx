@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { RUNWAY_MODELS } from "@/lib/runway-models";
 import { KLING_MODELS } from "@/lib/kling-models";
+import { FAL_MODELS } from "@/lib/fal-models";
 import { OPENAI_MODELS, OPENAI_MODEL_IDS, DEFAULT_OPENAI_MODEL } from "@/lib/openai-models";
 
 export const Route = createFileRoute("/_authenticated/admin/parametres")({ component: SettingsPage });
@@ -26,6 +27,7 @@ function SettingsPage() {
   const [s, setS] = useState<null | {
     videoModel: string; textModel: string; openaiModel: string; openaiConfigured: boolean; googleVideoModel: string;
     runwayVideoModel: string; runwayConfigured: boolean; klingVideoModel: string; klingConfigured: boolean;
+    falVideoModel: string; falConfigured: boolean;
     openrouterModel: string; openrouterConfigured: boolean;
     openrouterVideoModel: string; maxDuration: number; generationEnabled: boolean; allowedResolutions: Res[];
     monthlyBudget: number; alertThreshold: number; costPerVideoSecond: number; costPerStoryboard: number;
@@ -48,7 +50,7 @@ function SettingsPage() {
   const submit = async () => {
     setBusy(true);
     try {
-      const { runwayConfigured: _rc, openrouterConfigured: _oc, klingConfigured: _kc, openaiConfigured: _oai, ...payload } = s;
+      const { runwayConfigured: _rc, openrouterConfigured: _oc, klingConfigured: _kc, openaiConfigured: _oai, falConfigured: _fc, ...payload } = s;
       await save({ data: payload });
       toast.success("Paramètres enregistrés");
       qc.invalidateQueries({ queryKey: ["admin", "settings"] });
@@ -73,7 +75,7 @@ function SettingsPage() {
         <Input value={s.textModel} onChange={(e) => setS({ ...s, textModel: e.target.value })} />
       </div>
       <div className="space-y-2">
-        <Label>Modèle vidéo Runway {s.runwayConfigured ? "(3e dans la cascade)" : "(si clé Runway définie)"}</Label>
+        <Label>Modèle vidéo Runway {s.runwayConfigured ? "(4e dans la cascade)" : "(si clé Runway définie)"}</Label>
         <select className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
           value={s.runwayVideoModel} onChange={(e) => setS({ ...s, runwayVideoModel: e.target.value })}>
           {RUNWAY_MODELS.map((m) => {
@@ -88,7 +90,7 @@ function SettingsPage() {
         <p className="text-xs text-muted-foreground">En cas d'échec modèle (404), bascule automatique vers Gen-4.5, Veo Fast, Seedance mini, etc.</p>
       </div>
       <div className="space-y-2">
-        <Label>Modèle vidéo Kling {s.klingConfigured ? "(4e dans la cascade)" : "(si clé Kling définie)"}</Label>
+        <Label>Modèle vidéo Kling {s.klingConfigured ? "(5e dans la cascade)" : "(si clé Kling définie)"}</Label>
         <select className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
           value={s.klingVideoModel} onChange={(e) => setS({ ...s, klingVideoModel: e.target.value })}>
           {KLING_MODELS.map((m) => {
@@ -103,6 +105,21 @@ function SettingsPage() {
         <p className="text-xs text-muted-foreground">
           API <a className="underline" href="https://kling.ai/document-api/guides/get-started/overview" target="_blank" rel="noreferrer">Kling Open Platform</a>
           {" "}· secours auto Turbo → 2.5 → 2.6 → 3.0.
+        </p>
+      </div>
+      <div className="space-y-2">
+        <Label>Modèle vidéo Fal.ai {s.falConfigured ? "(2e dans la cascade)" : "(si clé Fal définie)"} · {FAL_MODELS.length} modèles</Label>
+        <select className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+          value={s.falVideoModel} onChange={(e) => setS({ ...s, falVideoModel: e.target.value })}>
+          {FAL_MODELS.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.label} · {Math.min(...m.durations)}–{Math.max(...m.durations)}s · {m.resolutions.join(", ")}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-muted-foreground">
+          API <a className="underline" href="https://fal.ai/dashboard" target="_blank" rel="noreferrer">fal.ai</a>
+          {" "}· défaut Seedance 2.0 Fast · secours Hailuo → Seedance 1.5 → Veo Fast.
         </p>
       </div>
       <div className="space-y-2">
@@ -123,7 +140,7 @@ function SettingsPage() {
             <option key={m.id} value={m.id}>{m.id} · {Math.min(...m.durations)}–{Math.max(...m.durations)} s · {m.resolutions.join(", ")}</option>
           ))}
         </select>
-        <p className="text-xs text-muted-foreground">Cascade vidéo : Google → OpenRouter → Runway → Kling → Lovable. Rotation automatique si crédits / quotas épuisés.</p>
+        <p className="text-xs text-muted-foreground">Cascade vidéo : Google → Fal.ai → OpenRouter → Runway → Kling → Lovable. Rotation automatique si crédits / quotas épuisés.</p>
       </div>
       <div className="space-y-2">
         <Label>Modèle vidéo Google (Veo — si clé Google définie)</Label>

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { runwayCreate, runwayFetch } from "./runway.server";
 import { klingCreate, klingFetch } from "./kling.server";
+import { falCreate, falFetch, falEncodeModel, falDecodeModel } from "./fal.server";
 import { openrouterVideoCreate, openrouterVideoFetch } from "./openrouter.server";
 import { GATEWAY, GOOGLE_API, gatewayMessage, getGatewayConfig, DEFAULT_GOOGLE_VIDEO_MODEL, DEFAULT_GOOGLE_VIDEO_FALLBACKS } from "./gateway.server";
 import { assertUsageAllowed } from "./limits.server";
@@ -148,6 +149,21 @@ async function tryGoogleVideo(cfg: GatewayCfg, opts: ClipGenOpts): Promise<{ job
   return last;
 }
 
+async function tryFalVideo(cfg: GatewayCfg, opts: ClipGenOpts): Promise<{ jobId: string } | { status: number; error: string } | null> {
+  if (!cfg.falKey) return null;
+  const models = [...new Set([cfg.falVideoModel, ...cfg.falVideoFallbacks].filter(Boolean))];
+  let last: { status: number; error: string } | null = null;
+  for (const model of models) {
+    const r = await falCreate(cfg.falKey, model, opts);
+    if (!("error" in r)) return { jobId: `fal:${falEncodeModel(r.model)}:${r.id}` };
+    last = { status: r.status, error: r.error };
+    if (r.status === 401 || r.status === 402 || r.status === 403) break;
+    if (!PROVIDER_EXHAUSTED.has(r.status) && r.status !== 404) break;
+    console.warn("fal model failed, trying next", model, r.status);
+  }
+  return last;
+}
+
 async function tryKlingVideo(cfg: GatewayCfg, opts: ClipGenOpts): Promise<{ jobId: string } | { status: number; error: string } | null> {
   if (!cfg.klingKey) return null;
   // Kling i2v docs: jpg/jpeg/png only — skip provider so Lovable can still run on WebP.
@@ -202,7 +218,7 @@ async function tryLovableVideo(cfg: GatewayCfg, opts: ClipGenOpts): Promise<{ jo
   return { jobId: ((await res.json()) as { id: string }).id };
 }
 
-/** Cascade: Google → OpenRouter → Runway → Kling → Lovable. Skip missing keys; rotate on credit/quota errors. */
+/** Cascade: Google → Fal → OpenRouter → Runway → Kling → Lovable. Skip missing keys; rotate on credit/quota errors. */
 async function startClipAcrossProviders(
   cfg: GatewayCfg,
   opts: ClipGenOpts,
@@ -210,6 +226,7 @@ async function startClipAcrossProviders(
   const attempts: string[] = [];
   const providers: Array<[string, () => Promise<{ jobId: string } | { status: number; error: string } | null>]> = [
     ["Google Veo", () => tryGoogleVideo(cfg, opts)],
+    ["Fal.ai", () => tryFalVideo(cfg, opts)],
     ["OpenRouter", () => tryOpenRouterVideo(cfg, opts)],
     ["Runway", () => tryRunwayVideo(cfg, opts)],
     ["Kling", () => tryKlingVideo(cfg, opts)],
@@ -230,7 +247,7 @@ async function startClipAcrossProviders(
   if (!attempts.length) {
     return {
       error:
-        "Aucune clé vidéo configurée. Ajoutez OpenRouter, Runway, Kling, Google (Gemini/Veo) ou Lovable dans Admin → Clés API.",
+        "Aucune clé vidéo configurée. Ajoutez Fal.ai, OpenRouter, Runway, Kling, Google (Gemini/Veo) ou Lovable dans Admin → Clés API.",
     };
   }
   return {
@@ -294,6 +311,15 @@ async function fetchJobVideo(jobId: string): Promise<
     const key = m ? cfg.openrouterKeys[Number(m[1])] : cfg.openrouterKey;
     if (!key) return { state: "failed", message: "Clé OpenRouter retirée avant la fin du rendu." };
     return openrouterVideoFetch(key, m ? m[2]! : rest);
+  }
+  if (jobId.startsWith("fal:")) {
+    if (!cfg.falKey) return { state: "failed", message: "Clé Fal.ai retirée avant la fin du rendu." };
+    const rest = jobId.slice(4);
+    const sep = rest.lastIndexOf(":");
+    if (sep < 0) return { state: "failed", message: "Identifiant de job Fal.ai invalide." };
+    const model = falDecodeModel(rest.slice(0, sep));
+    const requestId = rest.slice(sep + 1);
+    return falFetch(cfg.falKey, model, requestId);
   }
   if (jobId.startsWith("runway:")) {
     if (!cfg.runwayKey) return { state: "failed", message: "Clé Runway retirée avant la fin du rendu." };

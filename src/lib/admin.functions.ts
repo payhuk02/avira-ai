@@ -4,6 +4,7 @@ import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { RUNWAY_MODEL_IDS } from "./runway-models";
 import { KLING_MODEL_IDS } from "./kling-models";
 import { OPENAI_MODEL_IDS } from "./openai-models";
+import { FAL_MODEL_IDS } from "./fal-models";
 import { BRAND_SLUG } from "./brand";
 
 async function audit(
@@ -207,9 +208,10 @@ export const adminDeleteStoryboard = createServerFn({ method: "POST" })
 const KEYS = [
   { name: "LOVABLE_API_KEY", label: "Passerelle IA Lovable", usage: "Utilisée par défaut si aucune clé directe n'est définie" },
   { name: "OPENAI_API_KEY", label: "OpenAI (GPT)", usage: "Storyboards et analyses IA — prioritaire sur OpenRouter / passerelle Lovable" },
-  { name: "OPENROUTER_API_KEY", label: "OpenRouter", usage: "Texte (si pas de clé OpenAI) + vidéo — 2e dans la cascade vidéo ; pool de relais + modèles de secours" },
-  { name: "RUNWAY_API_KEY", label: "Runway Dev", usage: "Génération vidéo — 3e dans la cascade" },
-  { name: "KLING_API_KEY", label: "Kling AI", usage: "Génération vidéo — 4e dans la cascade (api-singapore.klingai.com)" },
+  { name: "FAL_API_KEY", label: "Fal.ai", usage: "Génération vidéo — 2e dans la cascade (Seedance, Hailuo, Veo via queue.fal.run)" },
+  { name: "OPENROUTER_API_KEY", label: "OpenRouter", usage: "Texte (si pas de clé OpenAI) + vidéo — 3e dans la cascade ; pool de relais + modèles de secours" },
+  { name: "RUNWAY_API_KEY", label: "Runway Dev", usage: "Génération vidéo — 4e dans la cascade" },
+  { name: "KLING_API_KEY", label: "Kling AI", usage: "Génération vidéo — 5e dans la cascade (api-singapore.klingai.com)" },
   { name: "GOOGLE_API_KEY", label: "Google (Gemini / Veo)", usage: "Vidéo Veo — 1er dans la cascade providers" },
 ] as const;
 type KeyName = (typeof KEYS)[number]["name"];
@@ -226,7 +228,7 @@ export const adminListKeys = createServerFn({ method: "GET" })
     const map = Object.fromEntries((data ?? []).map((r: any) => [r.key, r]));
     return KEYS.map((k) => {
       const override = map[k.name];
-      const env = process.env[k.name];
+      const env = process.env[k.name] || (k.name === "FAL_API_KEY" ? process.env["FAL_KEY"] : undefined);
       return {
         ...k,
         source: override ? ("custom" as const) : env ? ("default" as const) : ("missing" as const),
@@ -236,12 +238,12 @@ export const adminListKeys = createServerFn({ method: "GET" })
     });
   });
 
-const keyEnum = z.enum(["LOVABLE_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "RUNWAY_API_KEY", "KLING_API_KEY", "GOOGLE_API_KEY"]);
+const keyEnum = z.enum(["LOVABLE_API_KEY", "OPENAI_API_KEY", "FAL_API_KEY", "OPENROUTER_API_KEY", "RUNWAY_API_KEY", "KLING_API_KEY", "GOOGLE_API_KEY"]);
 
 export const adminSetKey = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((d) =>
-    z.object({ name: keyEnum, value: z.string().trim().max(500).nullable() }).parse(d),
+    z.object({ name: keyEnum, value: z.string().trim().max(800).nullable() }).parse(d),
   )
   .handler(async ({ data, context }) => {
     const admin = await assertAdmin(context);
@@ -262,7 +264,7 @@ export const adminSetKey = createServerFn({ method: "POST" })
 
 export const adminTestKey = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((d) => z.object({ name: keyEnum, value: z.string().trim().max(500).optional() }).parse(d))
+  .inputValidator((d) => z.object({ name: keyEnum, value: z.string().trim().max(800).optional() }).parse(d))
   .handler(async ({ data, context }) => {
     await assertAdmin(context);
     const { GATEWAY, GOOGLE_API, getGatewayConfig } = await import("./gateway.server");
@@ -277,14 +279,20 @@ export const adminTestKey = createServerFn({ method: "POST" })
             ? cfg?.runwayKey
             : name === "KLING_API_KEY"
               ? cfg?.klingKey
-              : name === "OPENROUTER_API_KEY"
-                ? cfg?.openrouterKey
-                : cfg?.apiKey;
+              : name === "FAL_API_KEY"
+                ? cfg?.falKey
+                : name === "OPENROUTER_API_KEY"
+                  ? cfg?.openrouterKey
+                  : cfg?.apiKey;
     const key = data.value || stored;
     if (!key) return { ok: false, status: 0 };
     if (name === "KLING_API_KEY") {
       const { klingTestKey } = await import("./kling.server");
       return klingTestKey(key);
+    }
+    if (name === "FAL_API_KEY") {
+      const { falTestKey } = await import("./fal.server");
+      return falTestKey(key);
     }
     const res =
       name === "OPENAI_API_KEY"
@@ -410,6 +418,8 @@ export const adminGetSettings = createServerFn({ method: "GET" })
       runwayConfigured: !!c.runwayKey,
       klingVideoModel: c.klingVideoModel,
       klingConfigured: !!c.klingKey,
+      falVideoModel: c.falVideoModel,
+      falConfigured: !!c.falKey,
       openrouterModel: c.openrouterModel,
       openrouterConfigured: !!c.openrouterKey,
       openrouterVideoModel: c.openrouterVideoModel,
@@ -446,6 +456,12 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
           .min(2)
           .max(60)
           .refine((id) => KLING_MODEL_IDS.has(id), "Modèle Kling inconnu"),
+        falVideoModel: z
+          .string()
+          .trim()
+          .min(3)
+          .max(200)
+          .refine((id) => FAL_MODEL_IDS.has(id), "Modèle Fal.ai inconnu"),
         openrouterModel: z.string().trim().min(2).max(200),
         openrouterVideoModel: z.string().trim().max(200),
         maxDuration: z.number().int().min(5).max(60),
@@ -472,6 +488,7 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
       { key: "google_video_model", value: data.googleVideoModel },
       { key: "runway_video_model", value: data.runwayVideoModel },
       { key: "kling_video_model", value: data.klingVideoModel },
+      { key: "fal_video_model", value: data.falVideoModel },
       { key: "openrouter_model", value: data.openrouterModel },
       { key: "openrouter_video_model", value: data.openrouterVideoModel },
       { key: "max_duration", value: String(data.maxDuration) },
