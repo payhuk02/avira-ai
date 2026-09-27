@@ -238,7 +238,6 @@ async function startClipAcrossProviders(
   };
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function startClip(data: z.infer<typeof clipInput>, context: { supabase: any; userId: string }) {
   {
     let cfg;
