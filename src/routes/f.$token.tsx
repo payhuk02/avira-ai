@@ -5,9 +5,14 @@ import { BRAND } from "@/lib/brand";
 
 export const Route = createFileRoute("/f/$token")({
   loader: async ({ params }) => {
-    const clip = await getSharedClip({ data: { token: params.token } }).catch(() => null);
-    if (!clip) throw notFound();
-    return clip;
+    const result = await getSharedClip({ data: { token: params.token } }).catch(() => null);
+    if (!result || !result.ok) {
+      if (result?.reason === "rate_limit") {
+        throw new Error("RATE_LIMIT");
+      }
+      throw notFound();
+    }
+    return result;
   },
   head: ({ loaderData }) => {
     const title = loaderData ? `${loaderData.scene.slice(0, 60)} — Film ${BRAND}` : `Film partagé — ${BRAND}`;
@@ -36,11 +41,24 @@ export const Route = createFileRoute("/f/$token")({
       </div>
     </main>
   ),
-  errorComponent: () => (
-    <main className="grid min-h-screen place-items-center bg-background text-sm text-muted-foreground">
-      Impossible de charger ce film.
-    </main>
-  ),
+  errorComponent: ({ error }) => {
+    const rateLimited = error instanceof Error && error.message === "RATE_LIMIT";
+    return (
+      <main className="grid min-h-screen place-items-center bg-background px-6 text-center">
+        <div>
+          <p className="font-mono text-[10px] uppercase text-muted-foreground">
+            {rateLimited ? "Trop de requêtes" : "Erreur"}
+          </p>
+          <h1 className="mt-2 font-display text-3xl">
+            {rateLimited ? "Réessayez dans une minute" : "Impossible de charger ce film"}
+          </h1>
+          <Link to="/" className="mt-6 inline-flex rounded-full bg-primary px-4 py-2 text-sm text-primary-foreground">
+            Découvrir {BRAND}
+          </Link>
+        </div>
+      </main>
+    );
+  },
 });
 
 function SharedFilm() {

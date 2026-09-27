@@ -239,7 +239,7 @@ function WorkspaceHeader() {
           <h1 className="truncate font-display text-lg leading-tight sm:text-xl">{meta.title}</h1>
         </div>
         <Button asChild size="sm" className="rounded-md shadow-none">
-          <Link to={actionTo}>
+          <Link to={actionTo} search={actionTo === "/studio" ? { reset: true } : undefined}>
             <Plus />
             <span className="hidden sm:inline">{meta.action}</span>
           </Link>

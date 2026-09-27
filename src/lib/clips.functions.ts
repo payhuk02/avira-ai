@@ -472,6 +472,7 @@ export const refreshClip = createServerFn({ method: "POST" })
 
     const job = await fetchJobVideo(clip.job_id);
     if (job.state === "failed") {
+      await releaseUsage(context.userId, "clip");
       const { data: upd } = await sb
         .from("clips")
         .update({ status: "failed", error: job.message })
@@ -490,6 +491,7 @@ export const refreshClip = createServerFn({ method: "POST" })
       console.error("upload failed", up.error);
       const retries = Number(String(clip.error ?? "").match(/^upload:(\d+)$/)?.[1] ?? 0) + 1;
       if (retries >= 3) {
+        await releaseUsage(context.userId, "clip");
         const { data: failed } = await sb
           .from("clips")
           .update({
@@ -588,7 +590,7 @@ export const restyleClip = createServerFn({ method: "POST" })
       {
         scene: `${clip.scene} (version ${data.stylePreset})`.slice(0, 2000),
         prompt: clip.prompt.slice(0, 3900),
-        format: aspect === "9:16" ? "9:16" : "16:9",
+        format: String(clip.format || aspect).slice(0, 10),
         aspect,
         resolution: (["360p", "720p", "1080p", "4k"].includes(clip.resolution) ? clip.resolution : "720p") as
           "360p" | "720p" | "1080p" | "4k",

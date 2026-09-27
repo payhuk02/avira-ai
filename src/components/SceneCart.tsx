@@ -73,10 +73,12 @@ export function SceneCartPanel({
   cart,
   busy,
   onProduce,
+  produceDisabled = false,
 }: {
   cart: ReturnType<typeof useSceneCart>;
   busy: boolean;
   onProduce: () => void;
+  produceDisabled?: boolean;
 }) {
   const totalShots = cart.items.reduce((s, i) => s + i.shots.length, 0);
   const totalSeconds = cart.items.reduce((s, i) => s + i.duration, 0);
@@ -98,7 +100,7 @@ export function SceneCartPanel({
             <button onClick={cart.clear} disabled={busy} className="rounded-full px-4 py-2 text-sm ring-1 ring-white/10 hover:ring-destructive disabled:opacity-50">
               Vider
             </button>
-            <button onClick={onProduce} disabled={busy} className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">
+            <button onClick={onProduce} disabled={busy || produceDisabled} className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50">
               <Play className="size-4" /> {busy ? "Envoi…" : "Tout produire"}
             </button>
           </div>

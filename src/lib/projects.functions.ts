@@ -110,8 +110,8 @@ export const getSharedClip = createServerFn({ method: "GET" })
     try {
       const { assertShareAllowed } = await import("./limits.server");
       await assertShareAllowed(data.token);
-    } catch {
-      return null;
+    } catch (e) {
+      return { ok: false as const, reason: "rate_limit" as const, message: (e as Error).message };
     }
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const nowIso = new Date().toISOString();
@@ -131,12 +131,13 @@ export const getSharedClip = createServerFn({ method: "GET" })
         .maybeSingle();
       clip = fallback.data as typeof clip;
     }
-    if (!clip?.storage_path) return null;
+    if (!clip?.storage_path) return { ok: false as const, reason: "not_found" as const };
     const expiresAt = (clip as { share_expires_at?: string | null }).share_expires_at;
-    if (expiresAt && expiresAt < nowIso) return null;
+    if (expiresAt && expiresAt < nowIso) return { ok: false as const, reason: "not_found" as const };
     const signed = await supabaseAdmin.storage.from("videos").createSignedUrl(clip.storage_path, 3600);
-    if (!signed.data?.signedUrl) return null;
+    if (!signed.data?.signedUrl) return { ok: false as const, reason: "not_found" as const };
     return {
+      ok: true as const,
       scene: clip.scene,
       format: clip.format,
       duration: clip.duration,

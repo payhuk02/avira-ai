@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
 import { AppHeader } from "@/components/AppHeader";
@@ -22,23 +22,28 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"in" | "up" | "reset">("in");
+  const [mode, setMode] = useState<"in" | "up" | "reset" | "newpass">("in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const recovering = useRef(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate({ to: "/bibliotheque" });
+      if (data.session && !recovering.current) navigate({ to: "/bibliotheque" });
     });
     const { data: sub } = supabase.auth.onAuthStateChange((e, s) => {
-      if (e === "SIGNED_IN" && s) navigate({ to: "/bibliotheque" });
       if (e === "PASSWORD_RECOVERY") {
-        setMode("in");
-        setMsg("Choisissez un nouveau mot de passe via le lien reçu, puis reconnectez-vous.");
+        recovering.current = true;
+        setMode("newpass");
+        setPassword("");
+        setErr(null);
+        setMsg("Choisissez un nouveau mot de passe pour sécuriser votre compte.");
+        return;
       }
+      if (e === "SIGNED_IN" && s && !recovering.current) navigate({ to: "/bibliotheque" });
     });
     return () => sub.subscription.unsubscribe();
   }, [navigate]);
@@ -54,6 +59,22 @@ function AuthPage() {
       });
       if (error) setErr(error.message);
       else setMsg("Si un compte existe pour cet e-mail, un lien de réinitialisation vient d’être envoyé.");
+      setBusy(false);
+      return;
+    }
+    if (mode === "newpass") {
+      if (password.length < 6) {
+        setErr("Le mot de passe doit contenir au moins 6 caractères.");
+        setBusy(false);
+        return;
+      }
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) setErr(error.message);
+      else {
+        recovering.current = false;
+        setMsg("Mot de passe mis à jour.");
+        navigate({ to: "/bibliotheque" });
+      }
       setBusy(false);
       return;
     }
@@ -79,7 +100,13 @@ function AuthPage() {
   }
 
   const title =
-    mode === "reset" ? "Réinitialiser le mot de passe" : mode === "in" ? "Bon retour sur le plateau" : "Créer votre compte";
+    mode === "reset"
+      ? "Réinitialiser le mot de passe"
+      : mode === "newpass"
+        ? "Nouveau mot de passe"
+        : mode === "in"
+          ? "Bon retour sur le plateau"
+          : "Créer votre compte";
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -93,10 +120,12 @@ function AuthPage() {
           <p className="mt-2 text-sm text-muted-foreground">
             {mode === "reset"
               ? "Nous vous enverrons un lien pour choisir un nouveau mot de passe."
-              : "Vos clips et storyboards sont conservés durablement dans votre bibliothèque."}
+              : mode === "newpass"
+                ? "Saisissez votre nouveau mot de passe (6 caractères minimum)."
+                : "Vos clips et storyboards sont conservés durablement dans votre bibliothèque."}
           </p>
 
-          {mode !== "reset" ? (
+          {mode !== "reset" && mode !== "newpass" ? (
             <>
               <button
                 onClick={google}
@@ -115,14 +144,16 @@ function AuthPage() {
           )}
 
           <form onSubmit={submit} className="space-y-3">
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="E-mail"
-              className="w-full rounded-[10px] bg-background px-4 py-2.5 text-sm outline-none ring-1 ring-white/10 focus:ring-primary"
-            />
+            {mode !== "newpass" ? (
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="E-mail"
+                className="w-full rounded-[10px] bg-background px-4 py-2.5 text-sm outline-none ring-1 ring-white/10 focus:ring-primary"
+              />
+            ) : null}
             {mode !== "reset" ? (
               <input
                 type="password"
@@ -130,7 +161,7 @@ function AuthPage() {
                 minLength={6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Mot de passe"
+                placeholder={mode === "newpass" ? "Nouveau mot de passe" : "Mot de passe"}
                 className="w-full rounded-[10px] bg-background px-4 py-2.5 text-sm outline-none ring-1 ring-white/10 focus:ring-primary"
               />
             ) : null}
@@ -142,9 +173,11 @@ function AuthPage() {
                 ? "…"
                 : mode === "reset"
                   ? "Envoyer le lien"
-                  : mode === "in"
-                    ? "Se connecter"
-                    : "Créer le compte"}
+                  : mode === "newpass"
+                    ? "Enregistrer le mot de passe"
+                    : mode === "in"
+                      ? "Se connecter"
+                      : "Créer le compte"}
             </button>
           </form>
           {err ? <p className="mt-3 text-sm text-destructive">{err}</p> : null}
@@ -164,21 +197,23 @@ function AuthPage() {
                 Mot de passe oublié ?
               </button>
             ) : null}
-            <button
-              type="button"
-              onClick={() => {
-                setMode(mode === "up" ? "in" : mode === "reset" ? "in" : "up");
-                setErr(null);
-                setMsg(null);
-              }}
-              className="underline-offset-4 hover:underline"
-            >
-              {mode === "in"
-                ? "Pas encore de compte ? Inscrivez-vous"
-                : mode === "up"
-                  ? "Déjà inscrit ? Connectez-vous"
-                  : "Retour à la connexion"}
-            </button>
+            {mode !== "newpass" ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setMode(mode === "up" ? "in" : mode === "reset" ? "in" : "up");
+                  setErr(null);
+                  setMsg(null);
+                }}
+                className="underline-offset-4 hover:underline"
+              >
+                {mode === "in"
+                  ? "Pas encore de compte ? Inscrivez-vous"
+                  : mode === "up"
+                    ? "Déjà inscrit ? Connectez-vous"
+                    : "Retour à la connexion"}
+              </button>
+            ) : null}
           </div>
         </div>
       </main>

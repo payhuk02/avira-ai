@@ -43,7 +43,8 @@ import { BRAND, BRAND_SLUG } from "@/lib/brand";
 const searchSchema = z.object({
   scene: z.string().max(4000).optional(),
   format: z.string().optional(),
-  duration: z.number().optional(),
+  duration: z.coerce.number().optional(),
+  reset: z.coerce.boolean().optional(),
 });
 
 export const Route = createFileRoute("/_authenticated/studio")({
@@ -92,6 +93,8 @@ function Studio() {
   const [aiConfigured, setAiConfigured] = useState(true);
   const [generationEnabled, setGenerationEnabled] = useState(true);
   const [quotaLabel, setQuotaLabel] = useState<string | null>(null);
+  const [clipsUsedToday, setClipsUsedToday] = useState(0);
+  const [dailyClipLimit, setDailyClipLimit] = useState(20);
   const [maxDuration, setMaxDuration] = useState(10);
   const [allowedResolutions, setAllowedResolutions] = useState<ResolutionId[]>([
     "360p",
@@ -153,18 +156,31 @@ function Studio() {
   const cart = useSceneCart(user?.id);
   const [picked, setPicked] = useState<string[]>([]);
   const navigate = useNavigate();
+  const quotaExhausted = dailyClipLimit > 0 && clipsUsedToday >= dailyClipLimit;
+  const canGenerate = Boolean(aiConfigured && generationEnabled && dailyClipLimit > 0 && !quotaExhausted);
 
   startNextShot.current = async () => {
     const next = queuedShots.current.shift();
-    if (!next) return;
-    const result = await create({ data: next });
-    if (result.error || !result.clip) {
-      queuedShots.current = [];
-      setError(result.error ?? "La séquence n’a pas pu continuer.");
+    if (!next) {
+      setBusy(false);
       return;
     }
-    setClips((previous) => [result.clip as Clip, ...previous]);
-    setActiveId(result.clip.id);
+    try {
+      const result = await create({ data: next });
+      if (result.error || !result.clip) {
+        queuedShots.current = [];
+        setBusy(false);
+        setError(result.error ?? "La séquence n’a pas pu continuer.");
+        return;
+      }
+      setClips((previous) => [result.clip as Clip, ...previous]);
+      setActiveId(result.clip.id);
+      setClipsUsedToday((n) => n + 1);
+    } catch (e) {
+      queuedShots.current = [];
+      setBusy(false);
+      setError((e as Error).message);
+    }
   };
 
   useEffect(() => {
@@ -186,6 +202,8 @@ function Studio() {
       setAiConfigured(true);
       setGenerationEnabled(true);
       setQuotaLabel(null);
+      setClipsUsedToday(0);
+      setDailyClipLimit(20);
       setMaxDuration(10);
       setAllowedResolutions(["360p", "720p", "1080p", "4k"]);
       return;
@@ -205,6 +223,8 @@ function Studio() {
         }
         const used = (limits as { clipsUsedToday?: number }).clipsUsedToday ?? 0;
         const cap = limits.dailyClipLimit;
+        setClipsUsedToday(used);
+        setDailyClipLimit(cap);
         if (cap > 0) setQuotaLabel(`${used} / ${cap} clips aujourd'hui`);
         else setQuotaLabel("Génération de clips désactivée");
       })
@@ -224,6 +244,7 @@ function Studio() {
           } else {
             polling.current.delete(id);
             if (queuedShots.current.length) void startNextShot.current();
+            else setBusy(false);
           }
         } catch {
           setTimeout(tick, 15000);
@@ -237,6 +258,32 @@ function Studio() {
   useEffect(() => {
     clips.filter((c) => c.status === "pending").forEach((c) => poll(c.id));
   }, [clips, poll]);
+
+  useEffect(() => {
+    if (!search.reset) return;
+    setScene(
+      "Une femme de 35 ans marche dans une rue de Lyon au crépuscule, plan moyen qui glisse latéralement, ambiance contemplative.",
+    );
+    setFormat("16:9");
+    setDuration(10);
+    setResolution("720p");
+    setCamera("tracking");
+    setVisualStyle("cinema");
+    setAudio("natural");
+    setVoiceOver("");
+    setReferenceImage(null);
+    setLight(62);
+    setGrain(40);
+    setUseRoles(true);
+    setRoles([
+      { toneId: "tone-1", genderId: "f", ageId: "30" },
+      { toneId: "tone-4", genderId: "m", ageId: "40" },
+    ]);
+    setVariants(1);
+    setPreviousScene(null);
+    setError(null);
+    void navigate({ to: "/studio", search: {}, replace: true });
+  }, [search.reset, navigate]);
 
   function buildShots(variant = 0): QueuedShot[] {
     const conf = FORMATS.find((f) => f.id === format);
@@ -270,21 +317,26 @@ function Studio() {
     if (!first) return;
     queuedShots.current = [...queuedShots.current, ...shots];
     const r = await create({ data: first });
-    if (r.error || !r.clip) throw new Error(r.error ?? "La génération a échoué.");
+    if (r.error || !r.clip) {
+      queuedShots.current = [];
+      throw new Error(r.error ?? "La génération a échoué.");
+    }
     setClips((prev) => [r.clip as Clip, ...prev]);
     setActiveId(r.clip.id);
+    setClipsUsedToday((n) => n + 1);
   }
 
   async function generate() {
-    if (!scene.trim() || busy || !user) return;
+    if (!scene.trim() || busy || !user || !canGenerate) return;
     setBusy(true);
     setError(null);
     try {
       await launch(Array.from({ length: variants }, (_, v) => buildShots(v)).flat());
+      if (!queuedShots.current.length) setBusy(false);
     } catch (e) {
-      setError((e as Error).message);
-    } finally {
+      queuedShots.current = [];
       setBusy(false);
+      setError((e as Error).message);
     }
   }
 
@@ -344,7 +396,7 @@ function Studio() {
 
   function addToCart() {
     if (!scene.trim()) return;
-    const shots = buildShots();
+    const shots = Array.from({ length: variants }, (_, v) => buildShots(v)).flat();
     cart.add({
       id: crypto.randomUUID(),
       scene: scene.trim().slice(0, 2000),
@@ -358,17 +410,18 @@ function Studio() {
   }
 
   async function produceCart() {
-    if (busy || !user || !cart.items.length) return;
+    if (busy || !user || !cart.items.length || !canGenerate) return;
     setBusy(true);
     setError(null);
     try {
       const ordered = sortCart(cart.items);
       await launch(ordered.flatMap((item) => item.shots.map((shot) => ({ ...shot }))));
       cart.clear();
+      if (!queuedShots.current.length) setBusy(false);
     } catch (e) {
-      setError((e as Error).message);
-    } finally {
+      queuedShots.current = [];
       setBusy(false);
+      setError((e as Error).message);
     }
   }
 
@@ -745,7 +798,7 @@ function Studio() {
               ) : (
               <button
                 onClick={generate}
-                disabled={busy || !scene.trim() || !aiConfigured || !generationEnabled}
+                disabled={busy || !scene.trim() || !canGenerate}
                 className="group inline-flex items-center gap-2.5 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground ring-1 ring-primary/40 transition-colors hover:bg-primary-deep hover:text-primary-foreground disabled:opacity-50"
               >
                 <span className="grid size-4 place-items-center">
@@ -913,7 +966,7 @@ function Studio() {
         </section>
 
         {user && (
-          <SceneCartPanel cart={cart} busy={busy} onProduce={produceCart} />
+          <SceneCartPanel cart={cart} busy={busy} produceDisabled={!canGenerate} onProduce={produceCart} />
         )}
 
         {/* Timeline */}
