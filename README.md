@@ -26,11 +26,12 @@ Dans **Project → Settings → Environment Variables**, ajoutez (Production + P
 | `VITE_SUPABASE_URL` | `https://…supabase.co` (embeddée au build client) |
 | `VITE_SUPABASE_PUBLISHABLE_KEY` | clé `sb_publishable_…` |
 | `VITE_SUPABASE_PROJECT_ID` | id projet |
-| `SUPABASE_URL` | même URL (SSR / server functions) |
-| `SUPABASE_PUBLISHABLE_KEY` | même clé publishable |
+| `SUPABASE_URL` | même URL (recommandé pour le serveur) |
+| `SUPABASE_PUBLISHABLE_KEY` | même clé publishable (recommandé) |
 | `SUPABASE_PROJECT_ID` | même id |
-| `SUPABASE_SERVICE_ROLE_KEY` | clé `sb_secret_…` (serveur uniquement) |
+| `SUPABASE_SERVICE_ROLE_KEY` | clé `sb_secret_…` (**obligatoire** pour quotas, partage, admin) |
 
+Le serveur accepte aussi les `VITE_*` en fallback si les `SUPABASE_*` manquent.  
 Puis **Redeploy** (les `VITE_*` ne sont prises en compte qu’au build).
 
 Dans Supabase → Authentication → URL Configuration, ajoutez :
