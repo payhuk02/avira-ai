@@ -157,30 +157,6 @@ export type Database = {
         }
         Relationships: []
       }
-      usage_counters: {
-        Row: {
-          subject_id: string
-          day: string
-          kind: string
-          count: number
-          updated_at: string
-        }
-        Insert: {
-          subject_id: string
-          day: string
-          kind: string
-          count?: number
-          updated_at?: string
-        }
-        Update: {
-          subject_id?: string
-          day?: string
-          kind?: string
-          count?: number
-          updated_at?: string
-        }
-        Relationships: []
-      }
       storyboards: {
         Row: {
           created_at: string
@@ -211,6 +187,30 @@ export type Database = {
           scenes?: Json
           title?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      usage_counters: {
+        Row: {
+          count: number
+          day: string
+          kind: string
+          subject_id: string
+          updated_at: string
+        }
+        Insert: {
+          count?: number
+          day: string
+          kind: string
+          subject_id: string
+          updated_at?: string
+        }
+        Update: {
+          count?: number
+          day?: string
+          kind?: string
+          subject_id?: string
+          updated_at?: string
         }
         Relationships: []
       }
