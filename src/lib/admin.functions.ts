@@ -210,7 +210,7 @@ const KEYS = [
   { name: "OPENAI_API_KEY", label: "OpenAI (GPT)", usage: "Storyboards et analyses IA — prioritaire sur OpenRouter / passerelle Lovable" },
   { name: "FAL_API_KEY", label: "Fal.ai", usage: "Génération vidéo — 2e dans la cascade (Seedance, Hailuo, Veo via queue.fal.run)" },
   { name: "OPENROUTER_API_KEY", label: "OpenRouter", usage: "Texte (si pas de clé OpenAI) + vidéo — 3e dans la cascade ; pool de relais + modèles de secours" },
-  { name: "RUNWAY_API_KEY", label: "Runway Dev", usage: "Génération vidéo — 4e dans la cascade" },
+  { name: "RUNWAY_API_KEY", label: "Runway Dev", usage: "Génération vidéo — 4e dans la cascade ; rotation auto des modèles si 412 ; pool via RUNWAY_API_KEYS" },
   { name: "KLING_API_KEY", label: "Kling AI", usage: "Génération vidéo — 5e dans la cascade (api-singapore.klingai.com)" },
   { name: "GOOGLE_API_KEY", label: "Google (Gemini / Veo)", usage: "Vidéo Veo — 1er dans la cascade providers" },
 ] as const;
@@ -294,13 +294,25 @@ export const adminTestKey = createServerFn({ method: "POST" })
       const { falTestKey } = await import("./fal.server");
       return falTestKey(key);
     }
+    if (name === "RUNWAY_API_KEY") {
+      const { runwayOrgInfo } = await import("./runway.server");
+      const info = await runwayOrgInfo(key);
+      if (!info.ok) return { ok: false, status: info.status };
+      const dollars = (info.creditBalance * 0.01).toFixed(2);
+      return {
+        ok: true,
+        status: 200,
+        detail:
+          info.creditBalance > 0
+            ? `Clé valide · ${info.creditBalance} crédits (~$${dollars})`
+            : "Clé valide mais 0 crédit — rechargez sur dev.runwayml.com (Billing, min 10 $). Une nouvelle clé sur la même org partage le même solde.",
+      };
+    }
     const res =
       name === "OPENAI_API_KEY"
         ? await fetch("https://api.openai.com/v1/models", { headers: { Authorization: `Bearer ${key}` } })
         : name === "OPENROUTER_API_KEY"
           ? await fetch("https://openrouter.ai/api/v1/key", { headers: { Authorization: `Bearer ${key}` } })
-        : name === "RUNWAY_API_KEY"
-          ? await fetch("https://api.dev.runwayml.com/v1/organization", { headers: { Authorization: `Bearer ${key}`, "X-Runway-Version": "2024-11-06" } })
         : name === "GOOGLE_API_KEY"
           ? await fetch(`${GOOGLE_API}/models`, { headers: { "x-goog-api-key": key } })
           : await fetch(`${GATEWAY}/models`, { headers: { Authorization: `Bearer ${key}` } });

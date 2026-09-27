@@ -56,6 +56,7 @@ export type GatewayConfig = {
   openaiKey: string | null;
   googleKey: string | null;
   runwayKey: string | null;
+  runwayKeys: string[];
   klingKey: string | null;
   falKey: string | null;
   openrouterKey: string | null;
@@ -93,13 +94,17 @@ async function readConfig(): Promise<Record<string, string>> {
 
 export async function getGatewayConfig(): Promise<GatewayConfig> {
   const c = await readConfig();
+  const splitList = (v?: string) => (v ?? "").split(/[\s,]+/).map((x) => x.trim()).filter(Boolean);
   const apiKey = c["LOVABLE_API_KEY"] || process.env["LOVABLE_API_KEY"] || "";
   const openaiKey = c["OPENAI_API_KEY"] || process.env["OPENAI_API_KEY"] || null;
   const googleKey = c["GOOGLE_API_KEY"] || process.env["GOOGLE_API_KEY"] || null;
-  const runwayKey = c["RUNWAY_API_KEY"] || process.env["RUNWAY_API_KEY"] || null;
+  const runwayPrimary = c["RUNWAY_API_KEY"] || process.env["RUNWAY_API_KEY"] || "";
+  const runwayKeys = [
+    ...new Set([runwayPrimary, ...splitList(c["RUNWAY_API_KEYS"] || process.env["RUNWAY_API_KEYS"])].filter(Boolean)),
+  ].slice(0, 20);
+  const runwayKey = runwayKeys[0] ?? null;
   const klingKey = c["KLING_API_KEY"] || process.env["KLING_API_KEY"] || null;
   const falKey = c["FAL_API_KEY"] || process.env["FAL_API_KEY"] || process.env["FAL_KEY"] || null;
-  const splitList = (v?: string) => (v ?? "").split(/[\s,]+/).map((x) => x.trim()).filter(Boolean);
   const openrouterKeys = [
     ...new Set([c["OPENROUTER_API_KEY"] || process.env["OPENROUTER_API_KEY"] || "", ...splitList(c["OPENROUTER_API_KEYS"])].filter(Boolean)),
   ].slice(0, 101);
@@ -114,6 +119,7 @@ export async function getGatewayConfig(): Promise<GatewayConfig> {
     openaiKey,
     googleKey,
     runwayKey,
+    runwayKeys,
     klingKey,
     falKey,
     openrouterKey,

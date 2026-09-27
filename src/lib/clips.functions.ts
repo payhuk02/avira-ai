@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { runwayCreate, runwayFetch } from "./runway.server";
+import { runwayCreateRotating, runwayFetch } from "./runway.server";
 import { klingCreate, klingFetch } from "./kling.server";
 import { falCreate, falFetch, falEncodeModel, falDecodeModel } from "./fal.server";
 import { openrouterVideoCreate, openrouterVideoFetch } from "./openrouter.server";
@@ -83,20 +83,11 @@ async function tryOpenRouterVideo(cfg: GatewayCfg, opts: ClipGenOpts): Promise<{
 }
 
 async function tryRunwayVideo(cfg: GatewayCfg, opts: ClipGenOpts): Promise<{ jobId: string } | { status: number; error: string } | null> {
-  if (!cfg.runwayKey) return null;
+  if (!cfg.runwayKeys.length) return null;
   const models = [...new Set([cfg.runwayVideoModel, ...cfg.runwayVideoFallbacks].filter(Boolean))];
-  let last: { status: number; error: string } | null = null;
-  for (const model of models) {
-    const r = await runwayCreate(cfg.runwayKey, model, opts);
-    if (!("error" in r)) return { jobId: `runway:${r.id}` };
-    last = { status: r.status, error: r.error };
-    // Same org key: auth/billing won't succeed on another model — cascade to next provider.
-    // 412 = Runway insufficient credits (not 402).
-    if (r.status === 401 || r.status === 402 || r.status === 403 || r.status === 412) break;
-    if (!PROVIDER_EXHAUSTED.has(r.status) && r.status !== 404) break;
-    console.warn("runway model failed, trying next", model, r.status);
-  }
-  return last;
+  const r = await runwayCreateRotating(cfg.runwayKeys, models, opts);
+  if ("error" in r) return { status: r.status, error: r.error };
+  return { jobId: `runway:${r.keyIndex}:${r.id}` };
 }
 
 async function tryGoogleVideo(cfg: GatewayCfg, opts: ClipGenOpts): Promise<{ jobId: string } | { status: number; error: string } | null> {
@@ -322,8 +313,11 @@ async function fetchJobVideo(jobId: string): Promise<
     return falFetch(cfg.falKey, model, requestId);
   }
   if (jobId.startsWith("runway:")) {
-    if (!cfg.runwayKey) return { state: "failed", message: "Clé Runway retirée avant la fin du rendu." };
-    return runwayFetch(cfg.runwayKey, jobId.slice(7));
+    const rest = jobId.slice(7);
+    const m = rest.match(/^(\d+):(.+)$/);
+    const key = m ? cfg.runwayKeys[Number(m[1])] : cfg.runwayKey;
+    if (!key) return { state: "failed", message: "Clé Runway retirée avant la fin du rendu." };
+    return runwayFetch(key, m ? m[2]! : rest);
   }
   if (jobId.startsWith("kling:")) {
     if (!cfg.klingKey) return { state: "failed", message: "Clé Kling retirée avant la fin du rendu." };

@@ -54,8 +54,8 @@ function KeyCard({ k }: { k: { name: "LOVABLE_API_KEY" | "OPENAI_API_KEY" | "FAL
       <div className="mt-4 flex flex-col gap-2 sm:flex-row">
         <Input type="password" autoComplete="off" placeholder="Nouvelle clé…" value={value} onChange={(e) => setValue(e.target.value)} />
         <Button disabled={busy} variant="outline" onClick={() => wrap(async () => {
-          const r = await test({ data: { name: k.name, value: value || undefined } });
-          if (r.ok) toast.success("Clé valide");
+          const r = await test({ data: { name: k.name, value: value || undefined } }) as { ok: boolean; status: number; detail?: string };
+          if (r.ok) toast.success(r.detail || "Clé valide");
           else toast.error(`Clé refusée (code ${r.status})`);
         })}>Tester</Button>
         <Button disabled={busy || !value} onClick={() => wrap(async () => {
