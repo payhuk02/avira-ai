@@ -1,7 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
-import { GATEWAY, gatewayMessage } from "./gateway.server";
 import { assertUsageAllowed, releaseUsage } from "./limits.server";
 
 export type ProjectRow = { id: string; name: string; color: string; created_at: string };
@@ -176,40 +175,16 @@ export const generateVoiceover = createServerFn({ method: "POST" })
     } catch (e) {
       return { error: (e as Error).message, audio: null };
     }
-    if (!cfg.apiKey) {
-      await releaseUsage(context.userId, "voiceover");
-      return { error: "La voix off IA n'est pas configurée.", audio: null };
-    }
-    const spoken = data.tone ? `Dis sur un ton ${data.tone} : ${data.text}` : data.text;
-    const res = await fetch(`${GATEWAY}/audio/speech`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${cfg.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "google/gemini-3.1-flash-tts-preview",
-        contents: [{ role: "user", parts: [{ text: spoken }] }],
-        generationConfig: {
-          responseModalities: ["AUDIO"],
-          speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: data.voice } } },
-        },
-        stream_format: "audio",
-      }),
+    const { synthesizeVoiceover } = await import("./tts.server");
+    const out = await synthesizeVoiceover(cfg, {
+      text: data.text,
+      voice: data.voice,
+      tone: data.tone,
     });
-    if (!res.ok) {
+    if ("error" in out) {
       await releaseUsage(context.userId, "voiceover");
-      const body = await res.text();
-      let msg: string | undefined;
-      try {
-        const p = JSON.parse(body) as { message?: string; error?: { message?: string } };
-        msg = p.message ?? p.error?.message;
-      } catch {
-        /* ignore invalid JSON */
-      }
-      console.error("tts failed", res.status, body.slice(0, 200));
-      return { error: gatewayMessage(res.status, msg), audio: null };
+      return { error: out.error, audio: null };
     }
     void reserved;
-    const buf = new Uint8Array(await res.arrayBuffer());
-    let bin = "";
-    for (let i = 0; i < buf.length; i += 0x8000) bin += String.fromCharCode(...buf.subarray(i, i + 0x8000));
-    return { error: null, audio: btoa(bin) };
+    return { error: null, audio: out.audio };
   });

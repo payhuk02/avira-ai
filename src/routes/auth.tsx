@@ -22,7 +22,7 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const navigate = useNavigate();
-  const [mode, setMode] = useState<"in" | "up">("in");
+  const [mode, setMode] = useState<"in" | "up" | "reset">("in");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -35,6 +35,10 @@ function AuthPage() {
     });
     const { data: sub } = supabase.auth.onAuthStateChange((e, s) => {
       if (e === "SIGNED_IN" && s) navigate({ to: "/bibliotheque" });
+      if (e === "PASSWORD_RECOVERY") {
+        setMode("in");
+        setMsg("Choisissez un nouveau mot de passe via le lien reçu, puis reconnectez-vous.");
+      }
     });
     return () => sub.subscription.unsubscribe();
   }, [navigate]);
@@ -44,6 +48,15 @@ function AuthPage() {
     setBusy(true);
     setErr(null);
     setMsg(null);
+    if (mode === "reset") {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: `${window.location.origin}/auth`,
+      });
+      if (error) setErr(error.message);
+      else setMsg("Si un compte existe pour cet e-mail, un lien de réinitialisation vient d’être envoyé.");
+      setBusy(false);
+      return;
+    }
     if (mode === "in") {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) setErr("Identifiants incorrects ou e-mail non confirmé.");
@@ -65,6 +78,9 @@ function AuthPage() {
     if (r.error) setErr("Connexion Google impossible.");
   }
 
+  const title =
+    mode === "reset" ? "Réinitialiser le mot de passe" : mode === "in" ? "Bon retour sur le plateau" : "Créer votre compte";
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       <AppHeader />
@@ -73,24 +89,30 @@ function AuthPage() {
           <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-muted-foreground/70">
             Accès studio
           </p>
-          <h1 className="mt-2 font-display text-3xl">
-            {mode === "in" ? "Bon retour sur le plateau" : "Créer votre compte"}
-          </h1>
+          <h1 className="mt-2 font-display text-3xl">{title}</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Vos clips et storyboards sont conservés durablement dans votre bibliothèque.
+            {mode === "reset"
+              ? "Nous vous enverrons un lien pour choisir un nouveau mot de passe."
+              : "Vos clips et storyboards sont conservés durablement dans votre bibliothèque."}
           </p>
 
-          <button
-            onClick={google}
-            className="mt-6 w-full rounded-full bg-background py-2.5 text-sm font-medium ring-1 ring-white/10 hover:bg-white/5"
-          >
-            Continuer avec Google
-          </button>
-          <div className="my-5 flex items-center gap-3">
-            <div className="h-px flex-1 bg-border" />
-            <span className="font-mono text-[10px] uppercase text-muted-foreground/60">ou</span>
-            <div className="h-px flex-1 bg-border" />
-          </div>
+          {mode !== "reset" ? (
+            <>
+              <button
+                onClick={google}
+                className="mt-6 w-full rounded-full bg-background py-2.5 text-sm font-medium ring-1 ring-white/10 hover:bg-white/5"
+              >
+                Continuer avec Google
+              </button>
+              <div className="my-5 flex items-center gap-3">
+                <div className="h-px flex-1 bg-border" />
+                <span className="font-mono text-[10px] uppercase text-muted-foreground/60">ou</span>
+                <div className="h-px flex-1 bg-border" />
+              </div>
+            </>
+          ) : (
+            <div className="mt-6" />
+          )}
 
           <form onSubmit={submit} className="space-y-3">
             <input
@@ -101,31 +123,63 @@ function AuthPage() {
               placeholder="E-mail"
               className="w-full rounded-[10px] bg-background px-4 py-2.5 text-sm outline-none ring-1 ring-white/10 focus:ring-primary"
             />
-            <input
-              type="password"
-              required
-              minLength={6}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Mot de passe"
-              className="w-full rounded-[10px] bg-background px-4 py-2.5 text-sm outline-none ring-1 ring-white/10 focus:ring-primary"
-            />
+            {mode !== "reset" ? (
+              <input
+                type="password"
+                required
+                minLength={6}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Mot de passe"
+                className="w-full rounded-[10px] bg-background px-4 py-2.5 text-sm outline-none ring-1 ring-white/10 focus:ring-primary"
+              />
+            ) : null}
             <button
               disabled={busy}
               className="w-full rounded-full bg-primary py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary-deep disabled:opacity-50"
             >
-              {busy ? "…" : mode === "in" ? "Se connecter" : "Créer le compte"}
+              {busy
+                ? "…"
+                : mode === "reset"
+                  ? "Envoyer le lien"
+                  : mode === "in"
+                    ? "Se connecter"
+                    : "Créer le compte"}
             </button>
           </form>
           {err ? <p className="mt-3 text-sm text-destructive">{err}</p> : null}
           {msg ? <p className="mt-3 text-sm text-primary-deep">{msg}</p> : null}
 
-          <button
-            onClick={() => setMode(mode === "in" ? "up" : "in")}
-            className="mt-5 text-xs text-muted-foreground underline-offset-4 hover:underline"
-          >
-            {mode === "in" ? "Pas encore de compte ? Inscrivez-vous" : "Déjà inscrit ? Connectez-vous"}
-          </button>
+          <div className="mt-5 flex flex-col gap-2 text-xs text-muted-foreground">
+            {mode === "in" ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setMode("reset");
+                  setErr(null);
+                  setMsg(null);
+                }}
+                className="underline-offset-4 hover:underline"
+              >
+                Mot de passe oublié ?
+              </button>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => {
+                setMode(mode === "up" ? "in" : mode === "reset" ? "in" : "up");
+                setErr(null);
+                setMsg(null);
+              }}
+              className="underline-offset-4 hover:underline"
+            >
+              {mode === "in"
+                ? "Pas encore de compte ? Inscrivez-vous"
+                : mode === "up"
+                  ? "Déjà inscrit ? Connectez-vous"
+                  : "Retour à la connexion"}
+            </button>
+          </div>
         </div>
       </main>
     </div>

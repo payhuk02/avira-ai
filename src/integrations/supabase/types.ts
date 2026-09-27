@@ -77,6 +77,7 @@ export type Database = {
           id: string
           job_id: string
           music_brief: string | null
+          subtitles: Json | null
           project_id: string | null
           prompt: string
           resolution: string
@@ -96,6 +97,7 @@ export type Database = {
           id?: string
           job_id: string
           music_brief?: string | null
+          subtitles?: Json | null
           project_id?: string | null
           prompt: string
           resolution?: string
@@ -115,6 +117,7 @@ export type Database = {
           id?: string
           job_id?: string
           music_brief?: string | null
+          subtitles?: Json | null
           project_id?: string | null
           prompt?: string
           resolution?: string

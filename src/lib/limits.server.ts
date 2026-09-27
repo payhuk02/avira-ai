@@ -238,3 +238,21 @@ export async function getPublicStudioLimits() {
     aiConfigured: true as const,
   };
 }
+
+/** Compteurs journaliers utilisateur pour l’UI studio. */
+export async function getMyQuotaSnapshot(userId: string) {
+  const limits = await getUsageLimits();
+  const [clipsUsedToday, storyboardsUsedToday, assistUsedToday] = await Promise.all([
+    counterToday(userId, "clip"),
+    counterToday(userId, "storyboard"),
+    counterToday(userId, "assist"),
+  ]);
+  return {
+    clipsUsedToday,
+    storyboardsUsedToday,
+    assistUsedToday,
+    dailyClipLimit: limits.dailyClipLimit,
+    dailyStoryboardLimit: limits.dailyStoryboardLimit,
+    dailyAssistLimit: limits.dailyAssistLimit,
+  };
+}

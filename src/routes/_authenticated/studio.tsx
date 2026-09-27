@@ -34,6 +34,7 @@ import {
   getClipDownloadUrl,
   listClips,
   refreshClip,
+  saveSubtitles,
   type ClipRow,
 } from "@/lib/clips.functions";
 import { getStudioLimits } from "@/lib/admin.functions";
@@ -89,6 +90,8 @@ function Studio() {
   const getDownload = useServerFn(getClipDownloadUrl);
   const loadLimits = useServerFn(getStudioLimits);
   const [aiConfigured, setAiConfigured] = useState(true);
+  const [generationEnabled, setGenerationEnabled] = useState(true);
+  const [quotaLabel, setQuotaLabel] = useState<string | null>(null);
   const [scene, setScene] = useState(
     search.scene ??
       "Une femme de 35 ans marche dans une rue de Lyon au crépuscule, plan moyen qui glisse latéralement, ambiance contemplative.",
@@ -116,6 +119,7 @@ function Studio() {
   const [error, setError] = useState<string | null>(null);
   const enhance = useServerFn(enhancePrompt);
   const subtitles = useServerFn(generateSubtitles);
+  const persistSubs = useServerFn(saveSubtitles);
   const [variants, setVariants] = useState(1);
   const [enhancing, setEnhancing] = useState(false);
   const [previousScene, setPreviousScene] = useState<string | null>(null);
@@ -124,9 +128,18 @@ function Studio() {
   const [subsBusy, setSubsBusy] = useState(false);
   const [playTime, setPlayTime] = useState(0);
   useEffect(() => {
-    setCues(activeId ? loadCues(activeId) : null);
+    if (!activeId) {
+      setCues(null);
+      setPlayTime(0);
+      return;
+    }
+    const fromDb = clips.find((c) => c.id === activeId)?.subtitles;
+    const parsed = Array.isArray(fromDb)
+      ? (fromDb as Cue[]).filter((c) => typeof c?.start === "number" && typeof c?.text === "string")
+      : null;
+    setCues(parsed?.length ? parsed : loadCues(activeId));
     setPlayTime(0);
-  }, [activeId]);
+  }, [activeId, clips]);
   const polling = useRef<Set<string>>(new Set());
   const queuedShots = useRef<QueuedShot[]>([]);
   const startNextShot = useRef<() => Promise<void>>(async () => {});
@@ -164,10 +177,19 @@ function Studio() {
   useEffect(() => {
     if (!user) {
       setAiConfigured(true);
+      setGenerationEnabled(true);
+      setQuotaLabel(null);
       return;
     }
     loadLimits()
-      .then((limits) => setAiConfigured(limits.aiConfigured !== false))
+      .then((limits) => {
+        setAiConfigured(limits.aiConfigured !== false);
+        setGenerationEnabled(limits.generationEnabled !== false);
+        const used = (limits as { clipsUsedToday?: number }).clipsUsedToday ?? 0;
+        const cap = limits.dailyClipLimit;
+        if (cap > 0) setQuotaLabel(`${used} / ${cap} clips aujourd'hui`);
+        else setQuotaLabel("Génération de clips désactivée");
+      })
       .catch(() => {});
   }, [user, loadLimits]);
 
@@ -287,6 +309,12 @@ function Studio() {
       });
       if (r.error || !r.cues) throw new Error(r.error ?? "Sous-titres indisponibles.");
       saveCues(clip.id, r.cues);
+      try {
+        await persistSubs({ data: { id: clip.id, cues: r.cues } });
+        setClips((prev) => prev.map((c) => (c.id === clip.id ? { ...c, subtitles: r.cues } : c)));
+      } catch (persistErr) {
+        console.warn("subtitles DB save failed, kept local", persistErr);
+      }
       setCues(r.cues);
       setShowSubs(true);
     } catch (e) {
@@ -490,6 +518,19 @@ function Studio() {
                   </p>
                 </div>
               ) : null}
+              {aiConfigured && !generationEnabled ? (
+                <div className="mt-4 rounded-[10px] bg-destructive/10 px-4 py-3 text-sm text-destructive ring-1 ring-destructive/30">
+                  <p className="font-medium">Génération suspendue</p>
+                  <p className="mt-1 text-destructive/90">
+                    L’administrateur a désactivé la génération (maintenance). Réessayez plus tard.
+                  </p>
+                </div>
+              ) : null}
+              {aiConfigured && generationEnabled && quotaLabel ? (
+                <p className="mt-3 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground/70">
+                  Quota · {quotaLabel}
+                </p>
+              ) : null}
               <div className="mt-4">
                 <p className="mb-2 font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60">Modèles prêts à l'emploi</p>
                 <div className="flex gap-2 overflow-x-auto pb-1">
@@ -684,7 +725,7 @@ function Studio() {
               ) : (
               <button
                 onClick={generate}
-                disabled={busy || !scene.trim() || !aiConfigured}
+                disabled={busy || !scene.trim() || !aiConfigured || !generationEnabled}
                 className="group inline-flex items-center gap-2.5 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground ring-1 ring-primary/40 transition-colors hover:bg-primary-deep hover:text-primary-foreground disabled:opacity-50"
               >
                 <span className="grid size-4 place-items-center">

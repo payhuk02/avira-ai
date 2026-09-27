@@ -1,13 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Copy, Download, FolderPlus, Link2, Music4, Search, Share2, Trash2, Wand2 } from "lucide-react";
 import { FORMATS } from "@/lib/studio";
 import {
   deleteClip,
   getClipDownloadUrl,
   listClips,
+  refreshClip,
   restyleClip,
   saveMusicBrief,
   STYLE_PRESETS,
@@ -24,10 +25,10 @@ import {
 import { BRAND } from "@/lib/brand";
 
 const SOCIAL_PRESETS = [
-  { id: "tiktok", label: "TikTok / Reels", format: "9:16", tip: "Vertical plein écran, idéal 9:16." },
-  { id: "youtube", label: "YouTube", format: "16:9", tip: "Paysage classique, idéal 16:9 en 1080p." },
-  { id: "instagram", label: "Instagram", format: "1:1", tip: "Carré pour le fil, vertical pour les stories." },
-  { id: "shorts", label: "Shorts", format: "9:16", tip: "Vertical court, moins de 60 secondes." },
+  { id: "tiktok", label: "TikTok / Reels", format: "9:16", tip: "Télécharge le fichier actuel (idéal si déjà en 9:16)." },
+  { id: "youtube", label: "YouTube", format: "16:9", tip: "Télécharge le fichier actuel (idéal si déjà en 16:9)." },
+  { id: "instagram", label: "Instagram", format: "1:1", tip: "Télécharge le même MP4 — pas de recadrage automatique." },
+  { id: "shorts", label: "Shorts", format: "9:16", tip: "Télécharge le fichier actuel (idéal si déjà en 9:16)." },
 ] as const;
 
 export const Route = createFileRoute("/_authenticated/bibliotheque")({
@@ -47,6 +48,7 @@ export const Route = createFileRoute("/_authenticated/bibliotheque")({
 function Library() {
   const qc = useQueryClient();
   const list = useServerFn(listClips);
+  const refresh = useServerFn(refreshClip);
   const del = useServerFn(deleteClip);
   const getDownload = useServerFn(getClipDownloadUrl);
   const restyle = useServerFn(restyleClip);
@@ -67,11 +69,40 @@ function Library() {
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const polling = useRef(new Set<string>());
 
   function patchClip(id: string, patch: Partial<ClipRow>) {
     qc.setQueryData<ClipRow[]>(["clips"], (p = []) => p.map((x) => (x.id === id ? { ...x, ...patch } : x)));
     setOpen((o) => (o && o.id === id ? { ...o, ...patch } : o));
   }
+
+  const pollPending = useCallback(
+    (id: string) => {
+      if (polling.current.has(id)) return;
+      polling.current.add(id);
+      const tick = async () => {
+        try {
+          const row = await refresh({ data: { id } });
+          qc.setQueryData<ClipRow[]>(["clips"], (p = []) => p.map((x) => (x.id === id ? { ...x, ...row } : x)));
+          setOpen((o) => (o && o.id === id ? { ...o, ...row } : o));
+          if (row.status === "pending") {
+            setTimeout(tick, 7000);
+          } else {
+            polling.current.delete(id);
+            void qc.invalidateQueries({ queryKey: ["clips"] });
+          }
+        } catch {
+          setTimeout(tick, 15000);
+        }
+      };
+      setTimeout(tick, 3000);
+    },
+    [refresh, qc],
+  );
+
+  useEffect(() => {
+    clips.filter((c) => c.status === "pending").forEach((c) => pollPending(c.id));
+  }, [clips, pollPending]);
 
   async function addProject() {
     const name = window.prompt("Nom du projet");
@@ -273,9 +304,18 @@ function Library() {
                   <Music4 className="size-3.5 text-primary" /> Musique & ambiance IA
                 </h3>
                 {open.music_brief ? (
-                  <p className="mt-2 whitespace-pre-line text-[11px] leading-relaxed text-muted-foreground">
-                    {open.music_brief}
-                  </p>
+                  <>
+                    <p className="mt-2 whitespace-pre-line text-[11px] leading-relaxed text-muted-foreground">
+                      {open.music_brief}
+                    </p>
+                    <button
+                      onClick={() => makeMusicBrief(open)}
+                      disabled={busy !== null}
+                      className="mt-2 text-[11px] text-primary underline-offset-2 hover:underline disabled:opacity-50"
+                    >
+                      {busy === "music" ? "Composition…" : "Régénérer"}
+                    </button>
+                  </>
                 ) : (
                   <>
                     <p className="mt-1 text-[11px] text-muted-foreground">
@@ -296,6 +336,9 @@ function Library() {
                 <h3 className="flex items-center gap-1.5 text-xs font-medium">
                   <Share2 className="size-3.5 text-primary" /> Export réseaux sociaux
                 </h3>
+                <p className="mt-1 text-[10px] text-muted-foreground">
+                  Télécharge le fichier tel quel — aucun reformatage automatique.
+                </p>
                 <div className="mt-2 space-y-1.5">
                   {SOCIAL_PRESETS.map((p) => (
                     <button
@@ -410,6 +453,7 @@ function Library() {
                     </span>
                     <button
                       onClick={async () => {
+                        if (!window.confirm("Supprimer définitivement ce clip ?")) return;
                         await del({ data: { id: c.id } });
                         qc.setQueryData<ClipRow[]>(["clips"], (p = []) => p.filter((x) => x.id !== c.id));
                         if (open?.id === c.id) setOpen(null);

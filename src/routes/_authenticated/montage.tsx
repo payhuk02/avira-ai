@@ -130,6 +130,26 @@ function Montage() {
   const mp4Supported = typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported?.("video/mp4");
   const total = sequence.reduce((s, c) => s + c.duration, 0);
 
+  useEffect(() => {
+    if (!sequence.length || cues.length) return;
+    let offset = 0;
+    const imported: Cue[] = [];
+    for (const clip of sequence) {
+      const subs = Array.isArray(clip.subtitles) ? clip.subtitles : [];
+      for (const s of subs) {
+        if (typeof s?.start !== "number" || typeof s?.text !== "string") continue;
+        imported.push({
+          id: crypto.randomUUID(),
+          start: offset + s.start,
+          end: offset + (typeof s.end === "number" ? s.end : s.start + 2),
+          text: String(s.text).slice(0, 200),
+        });
+      }
+      offset += clip.duration;
+    }
+    if (imported.length) setCues(imported);
+  }, [sequence.map((c) => c.id).join("|")]);
+
   const move = (i: number, d: number) =>
     setOrder((o) => {
       const n = [...o];
@@ -455,6 +475,7 @@ function VoiceGenerator({ onReady }: { onReady: (b: AudioBuffer) => void }) {
   return (
     <div className="rounded-[10px] bg-background p-4 ring-1 ring-primary/30">
       <p className="flex items-center gap-2 text-sm font-medium"><Sparkles className="size-4 text-primary" /> Voix off IA</p>
+      <p className="mt-1 text-[10px] text-muted-foreground">Lovable puis OpenAI (tts-1) si disponible.</p>
       <textarea value={text} onChange={(e) => setText(e.target.value)} maxLength={3000} rows={3} placeholder="Écrivez le texte de la narration…"
         className="mt-3 w-full resize-y rounded-md bg-paper px-3 py-2 text-xs outline-none ring-1 ring-white/10 focus:ring-primary" />
       <div className="mt-2 grid grid-cols-2 gap-2">

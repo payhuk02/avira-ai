@@ -44,7 +44,8 @@ function Stats() {
       <div>
         <h1 className="font-display text-3xl sm:text-4xl">Mes statistiques</h1>
         <p className="text-sm text-muted-foreground">
-          Votre activité de génération en un coup d'œil. Le coût est une estimation (0,10 €/seconde).
+          Votre activité de génération en un coup d'œil. Le coût est une estimation (
+          {s.costPerSecond.toFixed(2)} €/seconde, config admin).
         </p>
       </div>
 

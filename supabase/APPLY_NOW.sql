@@ -1,6 +1,6 @@
 -- À coller dans Supabase Dashboard → SQL Editor → Run
 -- Projet: hjjzwyxneekwhwhwqeih
--- Couvre: 20260927160000_usage_reserve + 20260927170000_share_expiry_and_events
+      -- Couvre: usage_reserve + share_expiry/events + clip_subtitles
 
 -- ===== usage reserve (idempotent) =====
 ALTER TABLE public.usage_counters DROP CONSTRAINT IF EXISTS usage_counters_kind_check;
@@ -99,3 +99,6 @@ WHERE s.created_at >= ((timezone('utc', now()))::date)::timestamptz
 GROUP BY s.user_id
 ON CONFLICT (subject_id, day, kind) DO UPDATE
 SET count = GREATEST(public.usage_counters.count, EXCLUDED.count), updated_at = now();
+
+-- Sous-titres IA persistés sur le clip (JSON array de { start, end, text }).
+ALTER TABLE public.clips ADD COLUMN IF NOT EXISTS subtitles jsonb;

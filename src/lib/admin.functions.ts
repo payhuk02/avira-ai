@@ -594,9 +594,13 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
 /* Public (signed-in) limits used by the studio */
 export const getStudioLimits = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
-  .handler(async () => {
-    const { getPublicStudioLimits } = await import("./limits.server");
-    return getPublicStudioLimits();
+  .handler(async ({ context }) => {
+    const { getPublicStudioLimits, getMyQuotaSnapshot } = await import("./limits.server");
+    const [limits, usage] = await Promise.all([
+      getPublicStudioLimits(),
+      getMyQuotaSnapshot(context.userId),
+    ]);
+    return { ...limits, ...usage };
   });
 
 /* ---------- Budget, usage & costs ---------- */

@@ -37,6 +37,7 @@ export type ClipRow = {
   error: string | null;
   storage_path: string | null;
   music_brief: string | null;
+  subtitles?: { start: number; end: number; text: string }[] | null;
   style_preset: string | null;
   project_id?: string | null;
   share_token?: string | null;
@@ -579,12 +580,15 @@ export const restyleClip = createServerFn({ method: "POST" })
       .eq("id", data.id)
       .single();
     if (error || !clip) throw new Error("Clip introuvable.");
-    const aspect = clip.format === "9:16" ? "9:16" : ("16:9" as const);
+    const aspect =
+      clip.format === "9:16" || clip.format === "4:5"
+        ? ("9:16" as const)
+        : ("16:9" as const);
     return startClip(
       {
         scene: `${clip.scene} (version ${data.stylePreset})`.slice(0, 2000),
         prompt: clip.prompt.slice(0, 3900),
-        format: clip.format,
+        format: aspect === "9:16" ? "9:16" : "16:9",
         aspect,
         resolution: (["360p", "720p", "1080p", "4k"].includes(clip.resolution) ? clip.resolution : "720p") as
           "360p" | "720p" | "1080p" | "4k",
@@ -610,6 +614,35 @@ export const saveMusicBrief = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+const cueRow = z.object({
+  start: z.number().min(0).max(600),
+  end: z.number().min(0).max(600),
+  text: z.string().trim().min(1).max(200),
+});
+
+export const saveSubtitles = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z.object({ id: z.string().uuid(), cues: z.array(cueRow).max(40) }).parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const cues = data.cues
+      .filter((c) => c.end > c.start)
+      .slice(0, 40)
+      .map((c) => ({ start: c.start, end: c.end, text: c.text.slice(0, 200) }));
+    const { error } = await context.supabase
+      .from("clips")
+      .update({ subtitles: cues })
+      .eq("id", data.id);
+    if (error) {
+      if (/subtitles/i.test(error.message)) {
+        throw new Error("Colonne subtitles absente — appliquez la migration clip_subtitles.");
+      }
+      throw new Error(error.message);
+    }
+    return { ok: true, cues };
+  });
+
 export type MyStats = {
   total: number;
   done: number;
@@ -618,6 +651,7 @@ export type MyStats = {
   successRate: number;
   totalSeconds: number;
   estimatedCost: number;
+  costPerSecond: number;
   byFormat: { format: string; count: number }[];
   byDay: { day: string; count: number }[];
   topStyles: { style: string; count: number }[];
@@ -638,6 +672,9 @@ export const myStats = createServerFn({ method: "GET" })
     const pending = rows.filter((r) => r.status === "pending");
     const finished = done.length + failed.length;
     const totalSeconds = done.reduce((s, r) => s + (r.duration ?? 0), 0);
+    const { getUsageLimits } = await import("./limits.server");
+    const limits = await getUsageLimits();
+    const rate = limits.costPerVideoSecond > 0 ? limits.costPerVideoSecond : 0.1;
     const byFormatMap = new Map<string, number>();
     const byDayMap = new Map<string, number>();
     const styleMap = new Map<string, number>();
@@ -654,7 +691,8 @@ export const myStats = createServerFn({ method: "GET" })
       pending: pending.length,
       successRate: finished ? Math.round((done.length / finished) * 100) : 0,
       totalSeconds,
-      estimatedCost: Math.round(totalSeconds * 0.1 * 100) / 100,
+      estimatedCost: Math.round(totalSeconds * rate * 100) / 100,
+      costPerSecond: rate,
       byFormat: [...byFormatMap.entries()].map(([format, count]) => ({ format, count })),
       byDay: [...byDayMap.entries()].slice(-14).map(([day, count]) => ({ day, count })),
       topStyles: [...styleMap.entries()]
