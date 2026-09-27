@@ -11,6 +11,7 @@ import { useEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
+import { BRAND } from "@/lib/brand";
 
 function NotFoundComponent() {
   return (
@@ -77,12 +78,12 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Avira ai — Studio vidéo IA" },
+      { title: `${BRAND} — Studio vidéo IA` },
       {
         name: "description",
         content: "Création de vidéos IA photoréalistes, tous formats, casting au choix.",
       },
-      { property: "og:title", content: "Avira ai — Studio vidéo IA" },
+      { property: "og:title", content: `${BRAND} — Studio vidéo IA` },
       {
         property: "og:description",
         content: "Création de vidéos IA photoréalistes, tous formats, casting au choix.",

@@ -1,6 +1,7 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { supabase } from "@/integrations/supabase/client";
 import { AdminShell } from "@/components/AdminShell";
+import { BRAND } from "@/lib/brand";
 
 export const Route = createFileRoute("/_authenticated/admin")({
   beforeLoad: async ({ context }) => {
@@ -9,8 +10,8 @@ export const Route = createFileRoute("/_authenticated/admin")({
   },
   head: () => ({
     meta: [
-      { title: "Administration — Avira ai" },
-      { name: "description", content: "Console d'administration de la plateforme Avira ai." },
+      { title: `Administration — ${BRAND}` },
+      { name: "description", content: `Console d'administration de la plateforme ${BRAND}.` },
       { name: "robots", content: "noindex" },
     ],
   }),

@@ -2,6 +2,7 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { BRAND } from "@/lib/brand";
 
 const NAV = [
   { to: "/", label: "Accueil" },
@@ -21,7 +22,7 @@ export function AppHeader({ children }: { children?: ReactNode }) {
             <span className="font-display text-lg leading-none text-black">A</span>
           </div>
           <div className="leading-none">
-            <p className="font-display text-lg">Avira ai</p>
+            <p className="font-display text-lg">{BRAND}</p>
             <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground/70">
               Studio de projection
             </p>

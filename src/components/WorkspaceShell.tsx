@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { checkAdmin } from "@/lib/admin.functions";
+import { BRAND, BRAND_TAGLINE } from "@/lib/brand";
 import {
   Sidebar,
   SidebarContent,
@@ -88,15 +89,15 @@ function WorkspaceSidebar() {
       <SidebarHeader className="p-3">
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild size="lg" tooltip="Avira ai">
+            <SidebarMenuButton asChild size="lg" tooltip={BRAND}>
               <Link to="/" onClick={closeMobile} className="group-data-[collapsible=icon]:justify-center">
                 <span className="grid size-8 shrink-0 place-items-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
                   <Film className="size-4" />
                 </span>
                 <span className="min-w-0 leading-tight">
-                  <span className="block font-display text-lg">Avira ai</span>
+                  <span className="block font-display text-lg">{BRAND}</span>
                   <span className="block font-mono text-[9px] uppercase text-sidebar-foreground/50">
-                    Atelier vidéo IA
+                    {BRAND_TAGLINE}
                   </span>
                 </span>
               </Link>

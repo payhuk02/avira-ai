@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ArrowDown, ArrowUp, Play, ShoppingBasket, Trash2 } from "lucide-react";
+import { BRAND_SLUG } from "@/lib/brand";
 
 export type Priority = "high" | "normal" | "low";
 export type CartItem<S = any> = {
@@ -25,7 +26,7 @@ export function sortCart<T extends CartItem>(items: T[]): T[] {
 }
 
 export function useSceneCart(userId?: string) {
-  const key = userId ? `avira-cart-${userId}` : null;
+  const key = userId ? `${BRAND_SLUG}-cart-${userId}` : null;
   const [items, setItems] = useState<CartItem[]>([]);
   const [warning, setWarning] = useState<string | null>(null);
 

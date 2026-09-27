@@ -1,10 +1,12 @@
-# Avira ai
+# Acostudio ai
 
 Plateforme premium et responsive de création de vidéos avec IA, tous formats. Les vidéos générées sont photoréalistes avec un casting configurable (teint de peau, genre, âge).
 
 Stack : TanStack Start · React 19 · Supabase · Bun.
 
-Repo : https://github.com/payhuk02/avira-ai
+Repo GitHub (slug historique) : https://github.com/payhuk02/avira-ai
+
+Marque produit : **Acostudio ai** (`acostudio.ai`). Les URLs Vercel / GitHub ci-dessous restent l’infra actuelle tant qu’elles n’ont pas été renommées côté hébergeur.
 
 ## Développement local
 

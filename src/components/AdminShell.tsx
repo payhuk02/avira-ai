@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { BRAND } from "@/lib/brand";
 import { Toaster } from "@/components/ui/sonner";
 import {
   Sidebar,
@@ -103,7 +104,7 @@ function AdminSidebar() {
                   <ShieldCheck className="size-4" />
                 </span>
                 <span className="min-w-0 leading-tight">
-                  <span className="block font-display text-lg">Avira ai</span>
+                  <span className="block font-display text-lg">{BRAND}</span>
                   <span className="block font-mono text-[9px] uppercase text-sidebar-foreground/50">
                     Console admin
                   </span>

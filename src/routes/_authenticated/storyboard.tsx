@@ -10,13 +10,14 @@ import {
   listStoryboards,
   type StoryboardRow,
 } from "@/lib/storyboard.functions";
+import { BRAND, BRAND_SLUG } from "@/lib/brand";
 
 export const Route = createFileRoute("/_authenticated/storyboard")({
   head: () => ({
     meta: [
-      { title: "Storyboard IA — Avira ai" },
+      { title: `Storyboard IA — ${BRAND}` },
       { name: "description", content: "Décrivez votre idée, obtenez un storyboard détaillé avec des scènes prêtes à produire." },
-      { property: "og:title", content: "Storyboard IA — Avira ai" },
+      { property: "og:title", content: `Storyboard IA — ${BRAND}` },
       { property: "og:description", content: "De l'idée au découpage technique, scène par scène." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -46,7 +47,7 @@ function StoryboardPage() {
   function sendAll(board: StoryboardRow) {
     if (!user) return;
     const conf = FORMATS.find((f) => f.id === board.format) ?? FORMATS[0]!;
-    const key = `avira-cart-${user.id}`;
+    const key = `${BRAND_SLUG}-cart-${user.id}`;
     let cart: unknown[] = [];
     try { cart = JSON.parse(localStorage.getItem(key) ?? "[]"); } catch {
       /* ignore corrupt cart */

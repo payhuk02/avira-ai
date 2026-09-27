@@ -1,6 +1,7 @@
 import type { Cue } from "./assist.functions";
+import { BRAND_SLUG } from "./brand";
 
-const KEY = (id: string) => `avira:subs:${id}`;
+const KEY = (id: string) => `${BRAND_SLUG}:subs:${id}`;
 
 export function loadCues(id: string): Cue[] | null {
   try {

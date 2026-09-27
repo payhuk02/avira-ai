@@ -1,3 +1,5 @@
+import { BRAND, BRAND_URL } from "./brand";
+
 export const OPENROUTER_API = "https://openrouter.ai/api/v1";
 
 type VideoModel = {
@@ -10,8 +12,8 @@ type VideoModel = {
 const headers = (key: string) => ({
   Authorization: `Bearer ${key}`,
   "Content-Type": "application/json",
-  "HTTP-Referer": "https://avira.ai",
-  "X-Title": "Avira ai",
+  "HTTP-Referer": BRAND_URL,
+  "X-Title": BRAND,
 });
 
 const RES_MAP: Record<string, string[]> = {

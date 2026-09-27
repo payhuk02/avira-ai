@@ -1,4 +1,4 @@
-# Panneau d'administration Avira ai
+# Panneau d'administration Acostudio ai
 
 ## Ce que vous obtiendrez
 Un espace **/admin** réservé à acostm3500@gmail.com, avec sa propre sidebar sombre (même identité crème / encre / ambre) :

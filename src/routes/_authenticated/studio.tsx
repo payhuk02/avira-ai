@@ -37,6 +37,7 @@ import {
   type ClipRow,
 } from "@/lib/clips.functions";
 import { getStudioLimits } from "@/lib/admin.functions";
+import { BRAND, BRAND_SLUG } from "@/lib/brand";
 
 const searchSchema = z.object({
   scene: z.string().max(4000).optional(),
@@ -48,13 +49,13 @@ export const Route = createFileRoute("/_authenticated/studio")({
   validateSearch: (s) => searchSchema.parse(s),
   head: () => ({
     meta: [
-      { title: "Studio — Avira ai" },
+      { title: `Studio — ${BRAND}` },
       {
         name: "description",
         content:
           "Générez des vidéos IA photoréalistes dans tous les formats, avec un casting réaliste : teint de peau, genre et âge au choix.",
       },
-      { property: "og:title", content: "Studio — Avira ai" },
+      { property: "og:title", content: `Studio — ${BRAND}` },
       {
         property: "og:description",
         content:
@@ -669,7 +670,7 @@ function Studio() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => downloadText(`avira-${activeClip.id}.srt`, toSrt(cues))}
+                    onClick={() => downloadText(`${BRAND_SLUG}-${activeClip.id}.srt`, toSrt(cues))}
                     className="inline-flex items-center gap-1.5 rounded-full bg-paper px-3 py-2.5 text-xs font-medium ring-1 ring-white/10 hover:ring-primary"
                   >
                     <FileText className="size-3.5" /> .srt
@@ -878,7 +879,7 @@ function Studio() {
                 disabled={!picked.length}
                 onClick={() => {
                   const ordered = [...clips].reverse().filter((c) => picked.includes(c.id)).map((c) => c.id);
-                  sessionStorage.setItem("avira-montage-selection", JSON.stringify(ordered));
+                  sessionStorage.setItem(`${BRAND_SLUG}-montage-selection`, JSON.stringify(ordered));
                   navigate({ to: "/montage" });
                 }}
                 className="rounded-full bg-primary px-4 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-40"

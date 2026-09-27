@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { RUNWAY_MODEL_IDS } from "./runway-models";
 import { KLING_MODEL_IDS } from "./kling-models";
+import { BRAND_SLUG } from "./brand";
 
 async function audit(
   admin: any,
@@ -158,7 +159,7 @@ export const adminClipUrl = createServerFn({ method: "POST" })
     if (!clip?.storage_path) throw new Error("Aucun fichier pour ce clip.");
     const { data: s, error } = await admin.storage
       .from("videos")
-      .createSignedUrl(clip.storage_path, 600, data.download ? { download: `avira-${data.id}.mp4` } : undefined);
+      .createSignedUrl(clip.storage_path, 600, data.download ? { download: `${BRAND_SLUG}-${data.id}.mp4` } : undefined);
     if (error) throw new Error(error.message);
     return { url: s.signedUrl };
   });

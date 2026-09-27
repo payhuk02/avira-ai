@@ -5,13 +5,14 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowDown, ArrowUp, Download, Film, Mic, Music, Play, Plus, Captions, Settings2, Sparkles, Square, X } from "lucide-react";
 import { listClips, type ClipRow } from "@/lib/clips.functions";
 import { generateVoiceover, VOICES } from "@/lib/projects.functions";
+import { BRAND, BRAND_SLUG } from "@/lib/brand";
 
 export const Route = createFileRoute("/_authenticated/montage")({
   head: () => ({
     meta: [
-      { title: "Montage automatique — Avira ai" },
+      { title: `Montage automatique — ${BRAND}` },
       { name: "description", content: "Assemblez vos scènes générées en un seul film, avec transitions, puis exportez-le." },
-      { property: "og:title", content: "Montage automatique — Avira ai" },
+      { property: "og:title", content: `Montage automatique — ${BRAND}` },
       { property: "og:description", content: "Ordonnez vos clips IA, choisissez les transitions et exportez un film final." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -98,9 +99,9 @@ function Montage() {
   const [order, setOrder] = useState<string[]>([]);
   useEffect(() => {
     try {
-      const saved = JSON.parse(sessionStorage.getItem("avira-montage-selection") ?? "[]");
+      const saved = JSON.parse(sessionStorage.getItem(`${BRAND_SLUG}-montage-selection`) ?? "[]");
       if (Array.isArray(saved) && saved.length) setOrder(saved);
-      sessionStorage.removeItem("avira-montage-selection");
+      sessionStorage.removeItem(`${BRAND_SLUG}-montage-selection`);
     } catch {
       /* ignore corrupt session selection */
     }
@@ -240,7 +241,7 @@ function Montage() {
           const url = URL.createObjectURL(new Blob(chunks, { type: recorder.mimeType || "video/webm" }));
           const a = document.createElement("a");
           a.href = url;
-          a.download = `avira-montage-${w}x${h}-${fps}ips-${Date.now()}.${recorder.mimeType.includes("mp4") ? "mp4" : "webm"}`;
+          a.download = `${BRAND_SLUG}-montage-${w}x${h}-${fps}ips-${Date.now()}.${recorder.mimeType.includes("mp4") ? "mp4" : "webm"}`;
           a.click();
           setTimeout(() => URL.revokeObjectURL(url), 10_000);
         }
@@ -527,7 +528,7 @@ function SubtitleEditor({ cues, setCues, style, setStyle, on, setOn, total }: {
     const body = sorted.map((c, i) => `${i + 1}\n${fmtSrt(c.start)} --> ${fmtSrt(c.end)}\n${c.text}\n`).join("\n");
     const url = URL.createObjectURL(new Blob([body], { type: "text/plain" }));
     const a = document.createElement("a");
-    a.href = url; a.download = "avira-montage.srt"; a.click();
+    a.href = url; a.download = `${BRAND_SLUG}-montage.srt`; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 5000);
   };
   const num = "w-16 rounded-[6px] bg-paper px-2 py-1 font-mono text-xs ring-1 ring-white/10 focus:outline-none focus:ring-primary";

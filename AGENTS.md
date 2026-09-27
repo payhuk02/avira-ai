@@ -9,9 +9,9 @@
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
 
-## Avira ai — architecture
+## Acostudio ai — architecture
 
-- Product brand: **Avira ai** (studio vidéo IA).
+- Product brand: **Acostudio ai** — constants in `src/lib/brand.ts`.
 - Clips and storyboards live in Supabase (tables clips/storyboards/projects, private bucket `videos`); MP4s are copied from the AI provider to storage on completion.
 - AI calls go through authenticated server functions in `src/lib/*.functions.ts`; no public video API routes, so only signed-in users spend credits.
 - All authenticated creator pages render inside `WorkspaceShell`.

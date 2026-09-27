@@ -1,6 +1,7 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { Film } from "lucide-react";
 import { getSharedClip } from "@/lib/projects.functions";
+import { BRAND } from "@/lib/brand";
 
 export const Route = createFileRoute("/f/$token")({
   loader: async ({ params }) => {
@@ -9,8 +10,8 @@ export const Route = createFileRoute("/f/$token")({
     return clip;
   },
   head: ({ loaderData }) => {
-    const title = loaderData ? `${loaderData.scene.slice(0, 60)} — Film Avira ai` : "Film partagé — Avira ai";
-    const description = "Un film généré par IA avec Avira ai, l'atelier vidéo des créateurs.";
+    const title = loaderData ? `${loaderData.scene.slice(0, 60)} — Film ${BRAND}` : `Film partagé — ${BRAND}`;
+    const description = `Un film généré par IA avec ${BRAND}, l'atelier vidéo des créateurs.`;
     return {
       meta: [
         { title },
@@ -30,7 +31,7 @@ export const Route = createFileRoute("/f/$token")({
         <p className="font-mono text-[10px] uppercase text-muted-foreground">Lien indisponible</p>
         <h1 className="mt-2 font-display text-3xl">Ce film n'est plus partagé</h1>
         <Link to="/" className="mt-6 inline-flex rounded-full bg-primary px-4 py-2 text-sm text-primary-foreground">
-          Découvrir Avira ai
+          Découvrir {BRAND}
         </Link>
       </div>
     </main>
@@ -49,7 +50,7 @@ function SharedFilm() {
     <main className="min-h-screen bg-background">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
         <Link to="/" className="flex items-center gap-2 font-display text-xl">
-          <Film className="size-5 text-primary" /> Avira ai
+          <Film className="size-5 text-primary" /> {BRAND}
         </Link>
         <Link to="/auth" className="rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground">
           Créer mon film
@@ -69,7 +70,7 @@ function SharedFilm() {
             {new Date(clip.created_at).toLocaleDateString("fr-FR")}
           </p>
           <h1 className="mt-3 font-display text-2xl sm:text-3xl">{clip.scene}</h1>
-          <p className="mt-3 text-sm text-muted-foreground">Réalisé avec Avira ai, l'atelier vidéo IA.</p>
+          <p className="mt-3 text-sm text-muted-foreground">Réalisé avec {BRAND}, l'atelier vidéo IA.</p>
         </div>
       </section>
     </main>

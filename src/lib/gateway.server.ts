@@ -1,4 +1,5 @@
 import { DEFAULT_KLING_MODEL as DEFAULT_KLING_VIDEO_MODEL, DEFAULT_KLING_VIDEO_FALLBACKS } from "./kling-models";
+import { BRAND, BRAND_URL } from "./brand";
 
 export const GATEWAY = "https://ai.gateway.lovable.dev/v1";
 export const GOOGLE_API = "https://generativelanguage.googleapis.com/v1beta";
@@ -168,7 +169,7 @@ export async function textModel(cfg: GatewayConfig) {
     const provider = createOpenAI({
       baseURL: OPENROUTER_API,
       apiKey: cfg.openrouterKey,
-      headers: { "HTTP-Referer": "https://avira.ai", "X-Title": "Avira ai" },
+      headers: { "HTTP-Referer": BRAND_URL, "X-Title": BRAND },
       // Rotates keys on credit exhaustion, then falls back to the next model; caps output tokens.
       fetch: async (input, init) => {
         const { openrouterRotate } = await import("./openrouter.server");

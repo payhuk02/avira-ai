@@ -21,6 +21,7 @@ import {
   setClipProject,
   setClipSharing,
 } from "@/lib/projects.functions";
+import { BRAND } from "@/lib/brand";
 
 const SOCIAL_PRESETS = [
   { id: "tiktok", label: "TikTok / Reels", format: "9:16", tip: "Vertical plein écran, idéal 9:16." },
@@ -32,9 +33,9 @@ const SOCIAL_PRESETS = [
 export const Route = createFileRoute("/_authenticated/bibliotheque")({
   head: () => ({
     meta: [
-      { title: "Ma bibliothèque — Avira ai" },
+      { title: `Ma bibliothèque — ${BRAND}` },
       { name: "description", content: "Retrouvez toutes vos vidéos IA générées, conservées durablement." },
-      { property: "og:title", content: "Ma bibliothèque — Avira ai" },
+      { property: "og:title", content: `Ma bibliothèque — ${BRAND}` },
       { property: "og:description", content: "Vos clips vidéo IA, rangés et prêts à télécharger." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

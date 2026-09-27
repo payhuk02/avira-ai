@@ -6,6 +6,7 @@ import { klingCreate, klingFetch } from "./kling.server";
 import { openrouterVideoCreate, openrouterVideoFetch } from "./openrouter.server";
 import { GATEWAY, GOOGLE_API, gatewayMessage, getGatewayConfig, DEFAULT_GOOGLE_VIDEO_MODEL, DEFAULT_GOOGLE_VIDEO_FALLBACKS } from "./gateway.server";
 import { assertUsageAllowed } from "./limits.server";
+import { BRAND_SLUG } from "./brand";
 
 export type ClipRow = {
   id: string;
@@ -416,7 +417,7 @@ export const getClipDownloadUrl = createServerFn({ method: "POST" })
       .eq("id", data.id)
       .single();
     if (error || !clip?.storage_path) throw new Error("Le rendu final n'est pas encore disponible.");
-    const filename = `avira-${data.id}-${clip.format}-${clip.resolution}.mp4`;
+    const filename = `${BRAND_SLUG}-${data.id}-${clip.format}-${clip.resolution}.mp4`;
     const signed = await context.supabase.storage
       .from("videos")
       .createSignedUrl(clip.storage_path, 300, { download: filename });

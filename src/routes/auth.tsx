@@ -3,14 +3,15 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
 import { AppHeader } from "@/components/AppHeader";
+import { BRAND } from "@/lib/brand";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
   head: () => ({
     meta: [
-      { title: "Connexion — Avira ai" },
-      { name: "description", content: "Connectez-vous à Avira ai pour conserver vos vidéos et storyboards." },
-      { property: "og:title", content: "Connexion — Avira ai" },
+      { title: `Connexion — ${BRAND}` },
+      { name: "description", content: `Connectez-vous à ${BRAND} pour conserver vos vidéos et storyboards.` },
+      { property: "og:title", content: `Connexion — ${BRAND}` },
       { property: "og:description", content: "Votre bibliothèque personnelle de vidéos IA." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

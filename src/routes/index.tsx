@@ -7,9 +7,10 @@ import format11 from "@/assets/format-11.jpg";
 import format219 from "@/assets/format-219.jpg";
 import format45 from "@/assets/format-45.jpg";
 import { ArrowUp, Instagram, Linkedin, Mail, Youtube } from "lucide-react";
+import { BRAND, BRAND_CONTACT } from "@/lib/brand";
 
 /** Adresse de contact affichée en pied de page — remplacez-la par la vôtre. */
-const CONTACT_EMAIL = "contact@avira.ai";
+const CONTACT_EMAIL = BRAND_CONTACT;
 
 /** Réseaux sociaux — remplacez "#" par l'URL de vos vrais profils. */
 const SOCIALS = [
@@ -70,13 +71,13 @@ const FORMAT_IMAGES: Record<string, { src: string; w: number; h: number; alt: st
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Avira ai — Studio vidéo IA : décrivez, cadrez, générez" },
+      { title: `${BRAND} — Studio vidéo IA : décrivez, cadrez, générez` },
       {
         name: "description",
         content:
-          "Avira ai transforme vos idées en clips vidéo IA photoréalistes : casting réel au choix, cinq formats, storyboard et bibliothèque personnelle.",
+          `${BRAND} transforme vos idées en clips vidéo IA photoréalistes : casting réel au choix, cinq formats, storyboard et bibliothèque personnelle.`,
       },
-      { property: "og:title", content: "Avira ai — Studio vidéo IA : décrivez, cadrez, générez" },
+      { property: "og:title", content: `${BRAND} — Studio vidéo IA : décrivez, cadrez, générez` },
       {
         property: "og:description",
         content:
@@ -145,7 +146,7 @@ function Landing() {
               <span className="font-display text-lg italic leading-none text-black">A</span>
             </div>
             <div className="leading-none">
-              <p className="font-display text-lg italic">Avira ai</p>
+              <p className="font-display text-lg italic">{BRAND}</p>
               <p className="font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground/70">
                 Studio vidéo IA
               </p>
@@ -179,7 +180,7 @@ function Landing() {
               <h1 className="mt-4 font-display text-5xl italic leading-[1.05] tracking-tight text-white sm:text-6xl">
                 Décrivez la scène.
                 <br />
-                <span className="text-primary">Avira ai la tourne.</span>
+                <span className="text-primary">{BRAND} la tourne.</span>
               </h1>
               <p className="mt-5 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
                 Vos idées deviennent des clips vidéo photoréalistes : casting réel au choix — teint
@@ -224,7 +225,7 @@ function Landing() {
                 <div className="relative overflow-hidden rounded-[10px]">
                   <img
                     src={heroStill}
-                    alt="Rendu Avira ai : humains réels en action dans une rue au crépuscule"
+                    alt={`Rendu ${BRAND} : humains réels en action dans une rue au crépuscule`}
                     width={1280}
                     height={720}
                     className="block aspect-[16/9] w-full object-cover"
@@ -285,7 +286,7 @@ function Landing() {
         {/* Features */}
         <section id="fonctionnalites" className="mx-auto max-w-[1200px] scroll-mt-24 px-5 py-16 sm:px-8">
           <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-primary">
-            Ce que Avira ai sait faire
+            Ce que {BRAND} sait faire
           </p>
           <h2 className="mt-3 max-w-2xl font-display text-3xl italic leading-tight text-white sm:text-4xl">
             Un vrai plateau de tournage, tenu en trois panneaux.
@@ -385,7 +386,7 @@ function Landing() {
               Trois scènes, prêtes à tourner
             </h2>
             <p className="max-w-sm text-sm text-muted-foreground">
-              Voilà à quoi ressemble un prompt Avira ai. Copiez-en un, ou écrivez le vôtre.
+              Voilà à quoi ressemble un prompt {BRAND}. Copiez-en un, ou écrivez le vôtre.
             </p>
           </div>
           <div className="mt-8 grid gap-4 md:grid-cols-3">
@@ -428,7 +429,7 @@ function Landing() {
               Prêt à passer derrière la caméra ?
             </h2>
             <p className="relative mx-auto mt-4 max-w-xl text-sm leading-relaxed text-muted-foreground sm:text-base">
-              Créez votre compte, décrivez votre première scène et regardez Avira ai la tourner —
+              Créez votre compte, décrivez votre première scène et regardez {BRAND} la tourner —
               puis gardez chaque clip dans votre bibliothèque.
             </p>
             <Link
@@ -461,14 +462,14 @@ function Landing() {
                   <span className="font-display text-xl italic leading-none text-black">A</span>
                 </div>
                 <div className="leading-none">
-                  <p className="font-display text-xl italic text-white">Avira ai</p>
+                  <p className="font-display text-xl italic text-white">{BRAND}</p>
                   <p className="mt-1.5 font-mono text-[10px] uppercase tracking-[0.22em] text-muted-foreground/70">
                     Studio vidéo IA
                   </p>
                 </div>
               </div>
               <p className="mt-5 max-w-sm text-sm leading-relaxed text-muted-foreground">
-                Décrivez une scène, choisissez vos acteurs, votre lumière et votre format : Avira ai
+                Décrivez une scène, choisissez vos acteurs, votre lumière et votre format : {BRAND}
                 tourne le clip, le décline en storyboard et le garde dans votre bibliothèque.
               </p>
               <div className="mt-6 flex flex-wrap items-center gap-2">
@@ -531,7 +532,7 @@ function Landing() {
           {/* Barre basse */}
           <div className="mt-12 flex flex-wrap items-center justify-between gap-4 border-t border-white/5 pt-6">
             <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground/70">
-              © {new Date().getFullYear()} Avira ai · Tous droits réservés
+              © {new Date().getFullYear()} {BRAND} · Tous droits réservés
             </p>
             <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground/70">
               Tous formats · Casting réel · Bibliothèque privée

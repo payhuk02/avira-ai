@@ -3,13 +3,14 @@ import { useServerFn } from "@tanstack/react-start";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart3, CheckCircle2, Clock3, Coins, Film, XCircle } from "lucide-react";
 import { myStats } from "@/lib/clips.functions";
+import { BRAND } from "@/lib/brand";
 
 export const Route = createFileRoute("/_authenticated/statistiques")({
   head: () => ({
     meta: [
-      { title: "Mes statistiques — Avira ai" },
+      { title: `Mes statistiques — ${BRAND}` },
       { name: "description", content: "Suivez vos générations : réussites, échecs, temps produit et coût estimé." },
-      { property: "og:title", content: "Mes statistiques — Avira ai" },
+      { property: "og:title", content: `Mes statistiques — ${BRAND}` },
       { property: "og:description", content: "Votre activité de génération vidéo en chiffres." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

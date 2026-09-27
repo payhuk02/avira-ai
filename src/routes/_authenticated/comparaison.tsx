@@ -4,13 +4,14 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import { GitCompareArrows, Play, Trophy } from "lucide-react";
 import { listClips, type ClipRow } from "@/lib/clips.functions";
+import { BRAND, BRAND_SLUG } from "@/lib/brand";
 
 export const Route = createFileRoute("/_authenticated/comparaison")({
   head: () => ({
     meta: [
-      { title: "Comparateur A/B — Avira ai" },
+      { title: `Comparateur A/B — ${BRAND}` },
       { name: "description", content: "Comparez deux versions d'une même scène côte à côte et choisissez la meilleure." },
-      { property: "og:title", content: "Comparateur A/B — Avira ai" },
+      { property: "og:title", content: `Comparateur A/B — ${BRAND}` },
       { property: "og:description", content: "Deux rendus face à face, un seul gagnant." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -19,7 +20,7 @@ export const Route = createFileRoute("/_authenticated/comparaison")({
   component: Compare,
 });
 
-const VOTES_KEY = "avira-ab-votes";
+const VOTES_KEY = `${BRAND_SLUG}-ab-votes`;
 
 function loadVotes(): Record<string, string> {
   try {

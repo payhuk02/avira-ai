@@ -9,7 +9,7 @@ Transformer l’espace connecté en véritable atelier de création, avec une na
 - Ajouter dans la sidebar des raccourcis utiles : nouvelle vidéo, nouveau storyboard, recherche dans la bibliothèque et retour au site.
 - Ajouter un bloc de compte compact avec e-mail et déconnexion.
 - Ajouter un en-tête d’espace de travail avec titre de page, bouton pour ouvrir/replier la sidebar et action principale contextuelle.
-- Raffiner les surfaces, contrastes, espacements et états interactifs pour une finition plus haut de gamme, tout en conservant l’identité crème, encre et ambre de Avira ai.
+- Raffiner les surfaces, contrastes, espacements et états interactifs pour une finition plus haut de gamme, tout en conservant l’identité crème, encre et ambre de Acostudio ai.
 
 ## Pages concernées
 - Studio

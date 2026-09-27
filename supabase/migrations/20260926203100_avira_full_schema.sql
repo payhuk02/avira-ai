@@ -1,4 +1,4 @@
--- Avira ai — schéma complet pour projet Supabase hjjzwyxneekwhwhwqeih
+-- Acostudio ai — schéma complet pour projet Supabase hjjzwyxneekwhwhwqeih
 -- Idempotent autant que possible. À exécuter dans SQL Editor (Dashboard → SQL).
 
 -- ========== Storage bucket ==========
