@@ -21,12 +21,14 @@ const RES_MAP: Record<string, string[]> = {
   "4k": ["4K", "2K", "1080p", "720p"],
 };
 
-/** Status codes that mean "this key cannot pay / is unusable" → try the next key. */
-const KEY_EXHAUSTED = new Set([401, 402, 403]);
+/** Statuses that mean "try the next key / model" (credits, auth, quota, rate limit). */
+const KEY_EXHAUSTED = new Set([401, 402, 403, 429]);
+/** Key is unusable for the rest of this rotate (no credits / invalid) — skip on later models. */
+const KEY_DEAD = new Set([401, 402]);
 
 /**
- * Tries every key for the first model; when all keys are out of credits, moves to the next model.
- * Other errors (400, 429, 5xx) are returned as-is.
+ * For each model, try every usable key. On 401/402 the key is skipped for remaining models.
+ * 403/429 still try the next key; other errors (400, 5xx) are returned immediately.
  */
 export async function openrouterRotate(
   keys: string[],
@@ -34,10 +36,13 @@ export async function openrouterRotate(
   call: (key: string, model: string, keyIndex: number) => Promise<Response>,
 ): Promise<Response> {
   let last: Response | null = null;
+  const deadKeys = new Set<number>();
   for (const model of [...new Set(models.filter(Boolean))]) {
     for (let i = 0; i < keys.length; i++) {
+      if (deadKeys.has(i)) continue;
       const res = await call(keys[i]!, model, i);
       if (!KEY_EXHAUSTED.has(res.status)) return res;
+      if (KEY_DEAD.has(res.status)) deadKeys.add(i);
       console.warn("openrouter key exhausted", { keyIndex: i, model, status: res.status });
       last = res;
     }

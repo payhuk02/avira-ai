@@ -1,4 +1,4 @@
-import { RUNWAY_MODELS, type RunwayModel } from "./runway-models";
+import { DEFAULT_RUNWAY_MODEL, RUNWAY_MODELS, type RunwayModel } from "./runway-models";
 
 export const RUNWAY_API = "https://api.dev.runwayml.com/v1";
 export const runwayHeaders = (key: string) => ({
@@ -9,12 +9,11 @@ export const runwayHeaders = (key: string) => ({
 
 const TARGET: Record<string, number> = { "360p": 360, "720p": 720, "1080p": 1080, "4k": 2160 };
 
-function pickRatio(m: RunwayModel, aspect: string, resolution: string) {
-  if (!m.ratios) return undefined;
+function pickRatio(ratios: string[], aspect: string, resolution: string) {
   const [aw = 16, ah = 9] = aspect.split(":").map(Number);
   const want = aw / ah;
   const target = TARGET[resolution] ?? 720;
-  const parsed = m.ratios.map((r) => {
+  const parsed = ratios.map((r) => {
     const [w = 1, h = 1] = r.split(":").map(Number);
     return { r, a: w / h, short: Math.min(w, h) };
   });
@@ -29,21 +28,62 @@ function pickDuration(m: RunwayModel, d: number) {
   return Math.min(m.max ?? 10, Math.max(m.min ?? 5, Math.round(d)));
 }
 
+function pickResolution(m: RunwayModel, resolution: string): string | undefined {
+  if (!m.resolutions?.length) return undefined;
+  const want = resolution === "4k" ? "2k" : resolution;
+  const lower = m.resolutions.map((r) => r.toLowerCase());
+  const idx = lower.indexOf(want.toLowerCase());
+  if (idx >= 0) return m.resolutions[idx];
+  // Prefer mid tier when studio asks 720p but model only has 480p/768p
+  if (want === "720p" || want === "1080p") {
+    const mid = lower.findIndex((r) => r === "768p" || r === "720p");
+    if (mid >= 0) return m.resolutions[mid];
+  }
+  if (want === "360p" || want === "480p") {
+    const low = lower.findIndex((r) => r === "480p" || r === "768p" || r === "720p");
+    if (low >= 0) return m.resolutions[low];
+  }
+  return m.resolutions[0];
+}
+
+function pickWanAutoRatio(resolution: string) {
+  if (resolution === "1080p" || resolution === "4k") return "auto_1080p";
+  if (resolution === "360p") return "auto_480p";
+  return "auto_720p";
+}
+
 export async function runwayCreate(
   key: string,
   modelId: string,
   opts: { prompt: string; aspect: string; resolution: string; duration: number; image?: { data: string; mimeType: string } | undefined },
 ): Promise<{ id: string } | { error: string; status: number }> {
-  const fallback = RUNWAY_MODELS[0] as RunwayModel;
+  const fallback = RUNWAY_MODELS.find((x) => x.id === DEFAULT_RUNWAY_MODEL) ?? (RUNWAY_MODELS[0] as RunwayModel);
   let m = RUNWAY_MODELS.find((x) => x.id === modelId) ?? fallback;
   if (!opts.image && !m.t2v) m = fallback; // image-only model: fall back to Gen-4.5 for text
+  const hasImage = !!opts.image;
   const body: Record<string, unknown> = {
     model: m.id,
-    promptText: opts.prompt.slice(0, 1000),
+    promptText: opts.prompt.slice(0, m.maxPrompt ?? 1000),
     duration: pickDuration(m, opts.duration),
   };
-  const ratio = pickRatio(m, opts.aspect, opts.resolution);
-  if (ratio) body["ratio"] = ratio;
+
+  const resTier = pickResolution(m, opts.resolution);
+  if (resTier) body["resolution"] = resTier;
+
+  if (hasImage && m.i2vAutoRatio) {
+    body["ratio"] = pickWanAutoRatio(opts.resolution);
+  } else if (hasImage && m.i2vRatioFromImage) {
+    // aspect follows input image — do not send ratio
+  } else if (hasImage && m.id === "hailuo3") {
+    body["ratio"] = "adaptive";
+  } else {
+    const ratios = hasImage && m.i2vRatios ? m.i2vRatios : m.ratios;
+    if (ratios?.length) {
+      const ratio = pickRatio(ratios, opts.aspect, opts.resolution);
+      if (ratio) body["ratio"] = ratio;
+    }
+  }
+
   if (opts.image) body["promptImage"] = `data:${opts.image.mimeType};base64,${opts.image.data}`;
   const res = await fetch(`${RUNWAY_API}/${opts.image ? "image_to_video" : "text_to_video"}`, {
     method: "POST",

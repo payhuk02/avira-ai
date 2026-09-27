@@ -1,4 +1,4 @@
-﻿import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { FORMATS, SKIN_TONES } from "@/lib/studio";
 import heroStill from "@/assets/hero-still.jpg";
 import format169 from "@/assets/format-169.jpg";

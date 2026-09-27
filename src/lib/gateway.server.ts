@@ -28,6 +28,18 @@ export const DEFAULT_GOOGLE_VIDEO_FALLBACKS = [
   "veo-3.1-generate-preview",
 ];
 export const DEFAULT_RUNWAY_VIDEO_MODEL = "gen4.5";
+/** Tried after the configured Runway model when that model fails (404 / model-specific). */
+export const DEFAULT_RUNWAY_VIDEO_FALLBACKS = [
+  "gen4.5",
+  "veo3.1_fast",
+  "seedance2_mini",
+  "seedance2_fast",
+  "gemini_omni_flash",
+  "hailuo3",
+  "happyhorse_1_0",
+  "grok_imagine_1_5",
+  "wan3",
+];
 
 export type GatewayConfig = {
   apiKey: string;
@@ -41,6 +53,7 @@ export type GatewayConfig = {
   openrouterModel: string;
   openrouterVideoModel: string;
   runwayVideoModel: string;
+  runwayVideoFallbacks: string[];
   googleVideoFallbacks: string[];
   videoModel: string;
   textModel: string;
@@ -95,6 +108,11 @@ export async function getGatewayConfig(): Promise<GatewayConfig> {
     openrouterVideoModel:
       c["openrouter_video_model"] || (openrouterKey ? DEFAULT_OPENROUTER_VIDEO_MODEL : ""),
     runwayVideoModel: c["runway_video_model"] || DEFAULT_RUNWAY_VIDEO_MODEL,
+    runwayVideoFallbacks: (() => {
+      const configured = splitList(c["runway_video_fallbacks"]);
+      if (configured.length) return configured;
+      return runwayKey ? DEFAULT_RUNWAY_VIDEO_FALLBACKS : [];
+    })(),
     videoModel: c["video_model"] || DEFAULT_VIDEO_MODEL,
     textModel: c["text_model"] || DEFAULT_TEXT_MODEL,
     openaiModel: c["openai_model"] || DEFAULT_OPENAI_MODEL,

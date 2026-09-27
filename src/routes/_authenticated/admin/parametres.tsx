@@ -64,13 +64,19 @@ function SettingsPage() {
         <Input value={s.textModel} onChange={(e) => setS({ ...s, textModel: e.target.value })} />
       </div>
       <div className="space-y-2">
-        <Label>Modèle vidéo Runway {s.runwayConfigured ? "(actif par défaut)" : "(si clé Runway définie)"}</Label>
+        <Label>Modèle vidéo Runway {s.runwayConfigured ? "(3e dans la cascade)" : "(si clé Runway définie)"}</Label>
         <select className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
           value={s.runwayVideoModel} onChange={(e) => setS({ ...s, runwayVideoModel: e.target.value })}>
-          {RUNWAY_MODELS.map((m) => (
-            <option key={m.id} value={m.id}>{m.label}{m.t2v ? "" : " — image requise"} · {m.id}</option>
-          ))}
+          {RUNWAY_MODELS.map((m) => {
+            const dur = m.durations ? `${m.durations.join("/")}s` : `${m.min ?? "?"}-${m.max ?? "?"}s`;
+            return (
+              <option key={m.id} value={m.id}>
+                {m.label}{m.t2v ? "" : " — image requise"} · {dur} · {m.id}
+              </option>
+            );
+          })}
         </select>
+        <p className="text-xs text-muted-foreground">En cas d'échec modèle (404), bascule automatique vers Gen-4.5, Veo Fast, Seedance mini, etc.</p>
       </div>
       <div className="space-y-2">
         <Label>Modèle OpenRouter {s.openrouterConfigured ? "(actif pour les textes)" : "(si clé OpenRouter définie)"} · {orModels.length} modèles</Label>
@@ -90,7 +96,7 @@ function SettingsPage() {
             <option key={m.id} value={m.id}>{m.id} · {Math.min(...m.durations)}–{Math.max(...m.durations)} s · {m.resolutions.join(", ")}</option>
           ))}
         </select>
-        <p className="text-xs text-muted-foreground">Si choisi et clé OpenRouter définie, prioritaire pour la génération vidéo.</p>
+        <p className="text-xs text-muted-foreground">Cascade vidéo : Google → OpenRouter (ce modèle + secours) → Runway → Lovable. Rotation automatique si crédits / quotas épuisés.</p>
       </div>
       <div className="space-y-2">
         <Label>Modèle vidéo Google (Veo — si clé Google définie)</Label>

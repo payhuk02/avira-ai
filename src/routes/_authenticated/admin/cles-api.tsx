@@ -95,7 +95,7 @@ function OpenRouterPool() {
         <span className="grid size-9 place-items-center rounded-md bg-primary/15"><KeyRound className="size-4" /></span>
         <div className="flex-1">
           <p className="font-medium">Clés OpenRouter de relais</p>
-          <p className="text-xs text-muted-foreground">Jusqu'à 100 clés. Quand une clé n'a plus de crédits, la suivante prend le relais automatiquement.</p>
+          <p className="text-xs text-muted-foreground">Jusqu'à 100 clés. Sur 401/402/403/429 la suivante est essayée ; une clé à 0 crédit (401/402) est ignorée pour les modèles suivants.</p>
         </div>
         <Badge variant="outline">{data.keys.length}/100</Badge>
       </div>

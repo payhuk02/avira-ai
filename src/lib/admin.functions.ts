@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { RUNWAY_MODEL_IDS } from "./runway-models";
 
 async function audit(
   admin: any,
@@ -203,9 +204,9 @@ export const adminDeleteStoryboard = createServerFn({ method: "POST" })
 const KEYS = [
   { name: "LOVABLE_API_KEY", label: "Passerelle IA Lovable", usage: "Utilisée par défaut si aucune clé directe n'est définie" },
   { name: "OPENAI_API_KEY", label: "OpenAI (GPT)", usage: "Storyboards et analyses IA — prioritaire sur la passerelle" },
-  { name: "OPENROUTER_API_KEY", label: "OpenRouter", usage: "Texte + vidéo (modèle vidéo par défaut Seedance mini) — prioritaire" },
-  { name: "RUNWAY_API_KEY", label: "Runway Dev", usage: "Génération vidéo — utilisée si OpenRouter vidéo est désactivé" },
-  { name: "GOOGLE_API_KEY", label: "Google (Gemini / Veo)", usage: "Vidéo Veo (Lite/Fast/standard) — essayé en premier dans la cascade providers" },
+  { name: "OPENROUTER_API_KEY", label: "OpenRouter", usage: "Texte + vidéo — 2e dans la cascade vidéo ; pool de relais + modèles de secours" },
+  { name: "RUNWAY_API_KEY", label: "Runway Dev", usage: "Génération vidéo — 3e dans la cascade (après Google et OpenRouter)" },
+  { name: "GOOGLE_API_KEY", label: "Google (Gemini / Veo)", usage: "Vidéo Veo — 1er dans la cascade providers" },
 ] as const;
 type KeyName = (typeof KEYS)[number]["name"];
 
@@ -406,7 +407,12 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
         textModel: z.string().trim().min(3).max(120),
         openaiModel: z.string().trim().min(3).max(120),
         googleVideoModel: z.string().trim().min(3).max(120),
-        runwayVideoModel: z.string().trim().min(2).max(60),
+        runwayVideoModel: z
+          .string()
+          .trim()
+          .min(2)
+          .max(60)
+          .refine((id) => RUNWAY_MODEL_IDS.has(id), "Modèle Runway inconnu"),
         openrouterModel: z.string().trim().min(2).max(200),
         openrouterVideoModel: z.string().trim().max(200),
         maxDuration: z.number().int().min(5).max(60),

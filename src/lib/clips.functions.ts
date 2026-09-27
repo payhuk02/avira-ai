@@ -73,24 +73,6 @@ type GatewayCfg = Awaited<ReturnType<typeof getGatewayConfig>>;
 
 async function tryOpenRouterVideo(cfg: GatewayCfg, opts: ClipGenOpts): Promise<{ jobId: string } | { status: number; error: string } | null> {
   if (!cfg.openrouterKey || !cfg.openrouterVideoModel) return null;
-  // Skip the whole OpenRouter model rotation when the account has zero credits.
-  try {
-    const cred = await fetch("https://openrouter.ai/api/v1/credits", {
-      headers: { Authorization: `Bearer ${cfg.openrouterKey}` },
-    });
-    if (cred.ok) {
-      const j = (await cred.json()) as { data?: { total_credits?: number } };
-      if ((j.data?.total_credits ?? 0) <= 0) {
-        return {
-          status: 402,
-          error:
-            "Crédits OpenRouter à 0 — bascule vers les autres providers.",
-        };
-      }
-    }
-  } catch {
-    /* still attempt generation if credits check fails */
-  }
   const r = await openrouterVideoCreate(cfg.openrouterKeys, [cfg.openrouterVideoModel, ...cfg.openrouterVideoFallbacks], opts);
   if ("error" in r) return { status: r.status, error: r.error };
   return { jobId: `openrouter:${r.keyIndex}:${r.id}` };
@@ -98,9 +80,18 @@ async function tryOpenRouterVideo(cfg: GatewayCfg, opts: ClipGenOpts): Promise<{
 
 async function tryRunwayVideo(cfg: GatewayCfg, opts: ClipGenOpts): Promise<{ jobId: string } | { status: number; error: string } | null> {
   if (!cfg.runwayKey) return null;
-  const r = await runwayCreate(cfg.runwayKey, cfg.runwayVideoModel, opts);
-  if ("error" in r) return { status: r.status, error: r.error };
-  return { jobId: `runway:${r.id}` };
+  const models = [...new Set([cfg.runwayVideoModel, ...cfg.runwayVideoFallbacks].filter(Boolean))];
+  let last: { status: number; error: string } | null = null;
+  for (const model of models) {
+    const r = await runwayCreate(cfg.runwayKey, model, opts);
+    if (!("error" in r)) return { jobId: `runway:${r.id}` };
+    last = { status: r.status, error: r.error };
+    // Same org key: 401/402/403 won't succeed on another model — cascade to next provider.
+    if (r.status === 401 || r.status === 402 || r.status === 403) break;
+    if (!PROVIDER_EXHAUSTED.has(r.status) && r.status !== 404) break;
+    console.warn("runway model failed, trying next", model, r.status);
+  }
+  return last;
 }
 
 async function tryGoogleVideo(cfg: GatewayCfg, opts: ClipGenOpts): Promise<{ jobId: string } | { status: number; error: string } | null> {
@@ -146,6 +137,8 @@ async function tryGoogleVideo(cfg: GatewayCfg, opts: ClipGenOpts): Promise<{ job
     }
     console.error("google video create failed", model, res.status, body.slice(0, 300));
     last = { status: res.status, error: gatewayMessage(res.status, msg) };
+    // Same API key: auth/billing failures won't recover on another Veo model.
+    if (res.status === 401 || res.status === 402 || res.status === 403) break;
     if (!PROVIDER_EXHAUSTED.has(res.status) && res.status !== 404) break;
   }
   return last;
@@ -188,7 +181,7 @@ async function tryLovableVideo(cfg: GatewayCfg, opts: ClipGenOpts): Promise<{ jo
   return { jobId: ((await res.json()) as { id: string }).id };
 }
 
-/** Try OpenRouter → Runway → Google → Lovable; skip providers without keys; rotate on credit/quota errors. */
+/** Cascade: Google → OpenRouter → Runway → Lovable. Skip missing keys; rotate on credit/quota errors. */
 async function startClipAcrossProviders(
   cfg: GatewayCfg,
   opts: ClipGenOpts,
