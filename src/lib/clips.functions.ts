@@ -261,7 +261,7 @@ async function startClip(data: z.infer<typeof clipInput>, context: { supabase: a
       aspect: data.aspect,
       resolution: data.resolution,
       duration: data.duration,
-      image: data.referenceImage,
+      ...(data.referenceImage ? { image: data.referenceImage } : {}),
     });
     if ("error" in started) return { error: started.error, clip: null };
     const jobId = started.jobId;
