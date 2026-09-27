@@ -81,7 +81,10 @@ export async function openrouterVideoCreate(
     } catch {
       /* ignore */
     }
-    if (r.status === 402) msg = "Toutes les clés OpenRouter sont à court de crédits pour les modèles choisis.";
+    if (r.status === 402) {
+      msg =
+        "Crédits OpenRouter insuffisants (compte à 0). Rechargez sur openrouter.ai/settings/credits, ou ajoutez une clé Runway / Google.";
+    }
     console.error("openrouter video create failed", r.status, text.slice(0, 300));
     return { error: msg, status: r.status };
   }
