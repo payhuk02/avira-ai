@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { KeyRound } from "lucide-react";
-import { adminListKeys, adminSetKey, adminTestKey, adminGetOpenRouterPool, adminSaveOpenRouterPool, adminTestOpenRouterPool } from "@/lib/admin.functions";
+import { adminListKeys, adminSetKey, adminTestKey, adminGetOpenRouterPool, adminSaveOpenRouterPool, adminTestOpenRouterPool, adminGetRunwayPool, adminSaveRunwayPool, adminTestRunwayPool } from "@/lib/admin.functions";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ function KeysPage() {
       </p>
       {isLoading ? <p className="text-sm text-muted-foreground">Chargement…</p> : data.map((k) => <KeyCard key={k.name} k={k} />)}
       <OpenRouterPool />
+      <RunwayPool />
     </div>
   );
 }
@@ -133,6 +134,127 @@ function OpenRouterPool() {
             <li key={i} className="flex justify-between font-mono">
               <span>{r.masked}</span>
               <span className={r.ok ? "" : "text-destructive"}>{r.ok ? (r.remaining == null ? "valide · sans limite" : `valide · reste ${r.remaining}`) : `refusée (${r.status})`}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function RunwayPool() {
+  const get = useServerFn(adminGetRunwayPool);
+  const save = useServerFn(adminSaveRunwayPool);
+  const test = useServerFn(adminTestRunwayPool);
+  const qc = useQueryClient();
+  const { data } = useQuery({ queryKey: ["admin", "runway-pool"], queryFn: () => get() });
+  const [add, setAdd] = useState("");
+  const [remove, setRemove] = useState<number[]>([]);
+  const [results, setResults] = useState<
+    { index: number; masked: string; ok: boolean; status: number; creditBalance: number | null }[] | null
+  >(null);
+  const [busy, setBusy] = useState(false);
+  if (!data) return null;
+  const newKeys = add.split(/\s+/).filter(Boolean);
+  const total = data.keys.length - remove.length + newKeys.length;
+  const run = async (f: () => Promise<void>) => {
+    setBusy(true);
+    try {
+      await f();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="rounded-lg border border-border bg-card p-5 space-y-4">
+      <div className="flex items-center gap-3">
+        <span className="grid size-9 place-items-center rounded-md bg-primary/15">
+          <KeyRound className="size-4" />
+        </span>
+        <div className="flex-1">
+          <p className="font-medium">Clés Runway de relais (autres orgs)</p>
+          <p className="text-xs text-muted-foreground">
+            Jusqu'à 20 clés d'organisations différentes. Une nouvelle clé sur la même org partage le même solde — ça
+            ne fait pas tourner les crédits. Sur 401/403 la clé est ignorée ; sur 400/412/429 le modèle ou la clé
+            suivante est essayée.
+          </p>
+        </div>
+        <Badge variant="outline">{data.keys.length}/20</Badge>
+      </div>
+      {data.primary && (
+        <p className="text-xs text-muted-foreground">
+          Clé principale (carte Runway ci-dessus) : <span className="font-mono">{data.primary.masked}</span> — toujours
+          essayée en premier.
+        </p>
+      )}
+      {data.keys.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {data.keys.map((k) => (
+            <button
+              key={k.index}
+              type="button"
+              onClick={() =>
+                setRemove((r) => (r.includes(k.index) ? r.filter((x) => x !== k.index) : [...r, k.index]))
+              }
+              className={`rounded-md border border-border px-2 py-1 font-mono text-xs ${remove.includes(k.index) ? "line-through opacity-50" : ""}`}
+              title="Cliquer pour retirer"
+            >
+              #{k.index + 1} {k.masked}
+            </button>
+          ))}
+        </div>
+      )}
+      <Textarea
+        rows={3}
+        placeholder="Ajouter des clés d'autres orgs Runway (une par ligne)…"
+        value={add}
+        onChange={(e) => setAdd(e.target.value)}
+        className="font-mono text-xs"
+      />
+      <div className="flex flex-wrap gap-2">
+        <Button
+          disabled={busy || total > 20}
+          onClick={() =>
+            run(async () => {
+              const r = await save({ data: { add: newKeys, remove } });
+              setAdd("");
+              setRemove([]);
+              setResults(null);
+              toast.success(`${r.count} clé(s) de relais Runway`);
+              qc.invalidateQueries({ queryKey: ["admin", "runway-pool"] });
+            })
+          }
+        >
+          Enregistrer{total > 20 ? " (max 20)" : ""}
+        </Button>
+        <Button
+          variant="outline"
+          disabled={busy}
+          onClick={() =>
+            run(async () => {
+              setResults(await test());
+            })
+          }
+        >
+          Tester toutes (principal + relais)
+        </Button>
+      </div>
+      {results && (
+        <ul className="space-y-1 text-xs">
+          {results.map((r) => (
+            <li key={r.index} className="flex justify-between gap-2 font-mono">
+              <span>
+                #{r.index + 1} {r.masked}
+              </span>
+              <span className={r.ok && (r.creditBalance ?? 0) > 0 ? "" : "text-destructive"}>
+                {r.ok
+                  ? r.creditBalance != null && r.creditBalance > 0
+                    ? `valide · ${r.creditBalance} crédits`
+                    : "valide · 0 crédit"
+                  : `refusée (${r.status})`}
+              </span>
             </li>
           ))}
         </ul>

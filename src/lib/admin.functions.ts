@@ -210,7 +210,7 @@ const KEYS = [
   { name: "OPENAI_API_KEY", label: "OpenAI (GPT)", usage: "Storyboards et analyses IA — prioritaire sur OpenRouter / passerelle Lovable" },
   { name: "FAL_API_KEY", label: "Fal.ai", usage: "Génération vidéo — 2e dans la cascade (Seedance, Hailuo, Veo via queue.fal.run)" },
   { name: "OPENROUTER_API_KEY", label: "OpenRouter", usage: "Texte (si pas de clé OpenAI) + vidéo — 3e dans la cascade ; pool de relais + modèles de secours" },
-  { name: "RUNWAY_API_KEY", label: "Runway Dev", usage: "Génération vidéo — 4e dans la cascade ; rotation auto des modèles si 412 ; pool via RUNWAY_API_KEYS" },
+  { name: "RUNWAY_API_KEY", label: "Runway Dev", usage: "Génération vidéo — 4e dans la cascade ; pool de relais ci-dessous pour d'autres orgs" },
   { name: "KLING_API_KEY", label: "Kling AI", usage: "Génération vidéo — 5e dans la cascade (api-singapore.klingai.com)" },
   { name: "GOOGLE_API_KEY", label: "Google (Gemini / Veo)", usage: "Vidéo Veo — 1er dans la cascade providers" },
 ] as const;
@@ -379,6 +379,76 @@ export const adminTestOpenRouterPool = createServerFn({ method: "POST" })
         const r = await fetch("https://openrouter.ai/api/v1/key", { headers: { Authorization: `Bearer ${k}` } });
         const d = r.ok ? ((await r.json()) as { data?: { limit_remaining?: number | null; usage?: number } }).data : undefined;
         return { masked: mask(k), ok: r.ok, status: r.status, remaining: d?.limit_remaining ?? null, usage: d?.usage ?? null };
+      }),
+    );
+  });
+
+/* ---------- Runway key pool (max 20 orgs) ---------- */
+
+export const adminGetRunwayPool = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const admin = await assertAdmin(context);
+    const { data } = await admin.from("app_config").select("key, value").in("key", ["RUNWAY_API_KEY", "RUNWAY_API_KEYS"]);
+    const m = Object.fromEntries((data ?? []).map((r: any) => [r.key, r.value as string]));
+    const primary = (m["RUNWAY_API_KEY"] ?? "").trim();
+    const extras: string[] = String(m["RUNWAY_API_KEYS"] ?? "").split(/\s+/).filter(Boolean);
+    return {
+      primary: primary ? { masked: mask(primary) } : null,
+      keys: extras.map((k: string, i: number) => ({ index: i, masked: mask(k) })),
+    };
+  });
+
+export const adminSaveRunwayPool = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((d) =>
+    z
+      .object({
+        add: z.array(z.string().trim().min(10).max(800)).max(20),
+        remove: z.array(z.number().int().min(0)).max(20),
+      })
+      .parse(d),
+  )
+  .handler(async ({ data, context }) => {
+    const admin = await assertAdmin(context);
+    const { data: row } = await admin.from("app_config").select("value").eq("key", "RUNWAY_API_KEYS").maybeSingle();
+    const current = ((row?.value as string | undefined) ?? "").split(/\s+/).filter(Boolean);
+    const kept = current.filter((_, i) => !data.remove.includes(i));
+    const next = [...new Set([...kept, ...data.add])];
+    if (next.length > 20) throw new Error("Maximum 20 clés Runway de relais.");
+    const now = new Date().toISOString();
+    if (next.length) {
+      const { error } = await admin
+        .from("app_config")
+        .upsert({ key: "RUNWAY_API_KEYS", value: next.join("\n"), is_secret: true, updated_at: now });
+      if (error) throw new Error(error.message);
+    } else await admin.from("app_config").delete().eq("key", "RUNWAY_API_KEYS");
+    await audit(admin, context, "api_key", "update_runway_pool", "RUNWAY_API_KEYS", {
+      count: next.length,
+      added: data.add.length,
+      removed: data.remove.length,
+    });
+    return { count: next.length };
+  });
+
+export const adminTestRunwayPool = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertAdmin(context);
+    const { getGatewayConfig } = await import("./gateway.server");
+    const { runwayOrgInfo } = await import("./runway.server");
+    const cfg = await getGatewayConfig().catch(() => null);
+    const keys = cfg?.runwayKeys ?? [];
+    return Promise.all(
+      keys.map(async (k, i) => {
+        const info = await runwayOrgInfo(k);
+        return {
+          index: i,
+          masked: mask(k),
+          ok: info.ok,
+          status: info.status,
+          creditBalance: info.ok ? info.creditBalance : null,
+        };
       }),
     );
   });
