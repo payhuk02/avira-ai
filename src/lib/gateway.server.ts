@@ -180,7 +180,7 @@ export function gatewayMessage(status: number, safeMessage?: string) {
   if (status === 400) return "Les réglages vidéo demandés ne sont pas valides.";
   if (status === 401) return "Le service de génération vidéo n'est pas configuré.";
   if (status === 402) return "Crédits IA épuisés. Rechargez votre espace de travail.";
-  if (status === 429) return "Trop de demandes. Réessayez dans un instant.";
+  if (status === 429) return "Quota du provider épuisé ou trop de demandes. Réessayez plus tard ou changez de clé.";
   if (status === 403) return "Ce modèle n'est pas accessible pour ce compte.";
   if (status === 404) return "Le service vidéo demandé est momentanément indisponible.";
   return "La génération a échoué.";

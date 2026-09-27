@@ -58,6 +58,164 @@ export const createClip = createServerFn({ method: "POST" })
   .inputValidator((d) => clipInput.parse(d))
   .handler(async ({ data, context }) => startClip(data, context));
 
+/** Statuses that mean "this provider has no usable credit / quota / auth" → try the next one. */
+const PROVIDER_EXHAUSTED = new Set([401, 402, 403, 429]);
+
+type ClipGenOpts = {
+  prompt: string;
+  aspect: "16:9" | "9:16";
+  resolution: "360p" | "720p" | "1080p" | "4k";
+  duration: number;
+  image?: { data: string; mimeType: "image/jpeg" | "image/png" | "image/webp" };
+};
+
+type GatewayCfg = Awaited<ReturnType<typeof getGatewayConfig>>;
+
+async function tryOpenRouterVideo(cfg: GatewayCfg, opts: ClipGenOpts): Promise<{ jobId: string } | { status: number; error: string } | null> {
+  if (!cfg.openrouterKey || !cfg.openrouterVideoModel) return null;
+  // Skip the whole OpenRouter model rotation when the account has zero credits.
+  try {
+    const cred = await fetch("https://openrouter.ai/api/v1/credits", {
+      headers: { Authorization: `Bearer ${cfg.openrouterKey}` },
+    });
+    if (cred.ok) {
+      const j = (await cred.json()) as { data?: { total_credits?: number } };
+      if ((j.data?.total_credits ?? 0) <= 0) {
+        return {
+          status: 402,
+          error:
+            "Crédits OpenRouter à 0 — bascule vers les autres providers.",
+        };
+      }
+    }
+  } catch {
+    /* still attempt generation if credits check fails */
+  }
+  const r = await openrouterVideoCreate(cfg.openrouterKeys, [cfg.openrouterVideoModel, ...cfg.openrouterVideoFallbacks], opts);
+  if ("error" in r) return { status: r.status, error: r.error };
+  return { jobId: `openrouter:${r.keyIndex}:${r.id}` };
+}
+
+async function tryRunwayVideo(cfg: GatewayCfg, opts: ClipGenOpts): Promise<{ jobId: string } | { status: number; error: string } | null> {
+  if (!cfg.runwayKey) return null;
+  const r = await runwayCreate(cfg.runwayKey, cfg.runwayVideoModel, opts);
+  if ("error" in r) return { status: r.status, error: r.error };
+  return { jobId: `runway:${r.id}` };
+}
+
+async function tryGoogleVideo(cfg: GatewayCfg, opts: ClipGenOpts): Promise<{ jobId: string } | { status: number; error: string } | null> {
+  if (!cfg.googleKey) return null;
+  const dur = opts.duration <= 5 ? 4 : opts.duration <= 7 ? 6 : 8;
+  const resolution = opts.resolution === "1080p" || opts.resolution === "4k" ? "1080p" : "720p";
+  const primary = cfg.googleVideoModel.replace(/^google\//, "");
+  const models = [...new Set([primary, "veo-3.1-fast-generate-preview", "veo-3.1-generate-preview"])];
+  let last: { status: number; error: string } | null = null;
+  for (const model of models) {
+    const res = await fetch(`${GOOGLE_API}/models/${model}:predictLongRunning`, {
+      method: "POST",
+      headers: { "x-goog-api-key": cfg.googleKey, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        instances: [
+          {
+            prompt: opts.prompt,
+            ...(opts.image
+              ? { image: { bytesBase64Encoded: opts.image.data, mimeType: opts.image.mimeType } }
+              : {}),
+          },
+        ],
+        parameters: { aspectRatio: opts.aspect, resolution, durationSeconds: dur },
+      }),
+    });
+    if (res.ok) {
+      const op = (await res.json()) as { name: string };
+      return { jobId: `google:${op.name}` };
+    }
+    const body = await res.text();
+    let msg: string | undefined;
+    try {
+      msg = (JSON.parse(body) as { error?: { message?: string } }).error?.message;
+    } catch {
+      /* ignore */
+    }
+    console.error("google video create failed", model, res.status, body.slice(0, 300));
+    last = { status: res.status, error: gatewayMessage(res.status, msg) };
+    if (!PROVIDER_EXHAUSTED.has(res.status) && res.status !== 404) break;
+  }
+  return last;
+}
+
+async function tryLovableVideo(cfg: GatewayCfg, opts: ClipGenOpts): Promise<{ jobId: string } | { status: number; error: string } | null> {
+  if (!cfg.apiKey) return null;
+  const res = await fetch(`${GATEWAY}/videos`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${cfg.apiKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: cfg.videoModel,
+      input: opts.image
+        ? [
+            { type: "text", text: opts.prompt },
+            { type: "image", data: opts.image.data, mime_type: opts.image.mimeType },
+          ]
+        : opts.prompt,
+      response_format: {
+        type: "video",
+        resolution: opts.resolution,
+        duration: `${Math.round(opts.duration)}s`,
+        aspect_ratio: opts.aspect,
+      },
+      ...(opts.image ? { generation_config: { video_config: { task: "image_to_video" } } } : {}),
+    }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    let safeMessage: string | undefined;
+    try {
+      const parsed = JSON.parse(body) as { message?: string; error?: { message?: string } };
+      safeMessage = parsed.message ?? parsed.error?.message;
+    } catch {
+      /* ignore */
+    }
+    console.error("lovable video create failed", res.status);
+    return { status: res.status, error: gatewayMessage(res.status, safeMessage) };
+  }
+  return { jobId: ((await res.json()) as { id: string }).id };
+}
+
+/** Try OpenRouter → Runway → Google → Lovable; skip providers without keys; rotate on credit/quota errors. */
+async function startClipAcrossProviders(
+  cfg: GatewayCfg,
+  opts: ClipGenOpts,
+): Promise<{ jobId: string } | { error: string }> {
+  const attempts: string[] = [];
+  const providers: Array<[string, () => Promise<{ jobId: string } | { status: number; error: string } | null>]> = [
+    ["Google Veo", () => tryGoogleVideo(cfg, opts)],
+    ["OpenRouter", () => tryOpenRouterVideo(cfg, opts)],
+    ["Runway", () => tryRunwayVideo(cfg, opts)],
+    ["Lovable", () => tryLovableVideo(cfg, opts)],
+  ];
+
+  for (const [name, run] of providers) {
+    const result = await run();
+    if (!result) continue;
+    if ("jobId" in result) return { jobId: result.jobId };
+    attempts.push(`${name}: ${result.error}`);
+    if (!PROVIDER_EXHAUSTED.has(result.status)) {
+      return { error: result.error };
+    }
+    console.warn("video provider exhausted, trying next", name, result.status);
+  }
+
+  if (!attempts.length) {
+    return {
+      error:
+        "Aucune clé vidéo configurée. Ajoutez OpenRouter, Runway, Google (Gemini/Veo) ou Lovable dans Admin → Clés API.",
+    };
+  }
+  return {
+    error: `Aucun provider vidéo disponible (crédits / quotas épuisés). ${attempts.join(" · ")}`,
+  };
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function startClip(data: z.infer<typeof clipInput>, context: { supabase: any; userId: string }) {
   {
@@ -75,102 +233,16 @@ async function startClip(data: z.infer<typeof clipInput>, context: { supabase: a
     const effectivePrompt = preset ? `${data.prompt}, ${preset.suffix}` : data.prompt;
     if (!cfg.allowedResolutions.includes(data.resolution))
       return { error: "Cette résolution est désactivée par l'administrateur.", clip: null };
-    let jobId: string;
-    if (cfg.openrouterKey && cfg.openrouterVideoModel) {
-      const r = await openrouterVideoCreate(cfg.openrouterKeys, [cfg.openrouterVideoModel, ...cfg.openrouterVideoFallbacks], {
-        prompt: effectivePrompt,
-        aspect: data.aspect,
-        resolution: data.resolution,
-        duration: data.duration,
-        image: data.referenceImage,
-      });
-      if ("error" in r) return { error: gatewayMessage(r.status, r.error), clip: null };
-      jobId = `openrouter:${r.keyIndex}:${r.id}`;
-    } else if (cfg.runwayKey) {
-      const r = await runwayCreate(cfg.runwayKey, cfg.runwayVideoModel, {
-        prompt: effectivePrompt,
-        aspect: data.aspect,
-        resolution: data.resolution,
-        duration: data.duration,
-        image: data.referenceImage,
-      });
-      if ("error" in r) return { error: gatewayMessage(r.status, r.error), clip: null };
-      jobId = `runway:${r.id}`;
-    } else if (cfg.googleKey) {
-      // Direct Google Veo (Gemini API): durations 4/6/8 s, 720p/1080p
-      const dur = data.duration <= 5 ? 4 : data.duration <= 7 ? 6 : 8;
-      const resolution = data.resolution === "1080p" || data.resolution === "4k" ? "1080p" : "720p";
-      const model = cfg.googleVideoModel.replace(/^google\//, "");
-      const res = await fetch(`${GOOGLE_API}/models/${model}:predictLongRunning`, {
-        method: "POST",
-        headers: { "x-goog-api-key": cfg.googleKey, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          instances: [
-            {
-              prompt: effectivePrompt,
-              ...(data.referenceImage
-                ? { image: { bytesBase64Encoded: data.referenceImage.data, mimeType: data.referenceImage.mimeType } }
-                : {}),
-            },
-          ],
-          parameters: { aspectRatio: data.aspect, resolution, durationSeconds: dur },
-        }),
-      });
-      if (!res.ok) {
-        const body = await res.text();
-        let msg: string | undefined;
-        try { msg = (JSON.parse(body) as { error?: { message?: string } }).error?.message; } catch {
-          /* ignore invalid JSON */
-        }
-        console.error("google video create failed", res.status, body.slice(0, 300));
-        return { error: gatewayMessage(res.status, msg), clip: null };
-      }
-      const op = (await res.json()) as { name: string };
-      jobId = `google:${op.name}`;
-    } else {
-      if (!cfg.apiKey) {
-        return {
-          error:
-            "Aucune clé vidéo configurée. Avec OpenRouter : choisissez un modèle vidéo dans Admin → Paramètres, ou ajoutez une clé Runway / Google / Lovable.",
-          clip: null,
-        };
-      }
-      const res = await fetch(`${GATEWAY}/videos`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${cfg.apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify({
-          model: cfg.videoModel,
-          input: data.referenceImage
-            ? [
-                { type: "text", text: effectivePrompt },
-                { type: "image", data: data.referenceImage.data, mime_type: data.referenceImage.mimeType },
-              ]
-            : effectivePrompt,
-          response_format: {
-            type: "video",
-            resolution: data.resolution,
-            duration: `${Math.round(data.duration)}s`,
-            aspect_ratio: data.aspect,
-          },
-          ...(data.referenceImage
-            ? { generation_config: { video_config: { task: "image_to_video" } } }
-            : {}),
-        }),
-      });
-      if (!res.ok) {
-        const body = await res.text();
-        let safeMessage: string | undefined;
-        try {
-          const parsed = JSON.parse(body) as { message?: string; error?: { message?: string } };
-          safeMessage = parsed.message ?? parsed.error?.message;
-        } catch {
-          /* ignore invalid JSON */
-        }
-        console.error("video create failed", res.status);
-        return { error: gatewayMessage(res.status, safeMessage), clip: null };
-      }
-      jobId = ((await res.json()) as { id: string }).id;
-    }
+
+    const started = await startClipAcrossProviders(cfg, {
+      prompt: effectivePrompt,
+      aspect: data.aspect,
+      resolution: data.resolution,
+      duration: data.duration,
+      image: data.referenceImage,
+    });
+    if ("error" in started) return { error: started.error, clip: null };
+    const jobId = started.jobId;
     const { data: row, error } = await context.supabase
       .from("clips")
       .insert({
