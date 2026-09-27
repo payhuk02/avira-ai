@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { RUNWAY_MODEL_IDS } from "./runway-models";
 import { KLING_MODEL_IDS } from "./kling-models";
+import { OPENAI_MODEL_IDS } from "./openai-models";
 import { BRAND_SLUG } from "./brand";
 
 async function audit(
@@ -205,8 +206,8 @@ export const adminDeleteStoryboard = createServerFn({ method: "POST" })
 
 const KEYS = [
   { name: "LOVABLE_API_KEY", label: "Passerelle IA Lovable", usage: "Utilisée par défaut si aucune clé directe n'est définie" },
-  { name: "OPENAI_API_KEY", label: "OpenAI (GPT)", usage: "Storyboards et analyses IA — prioritaire sur la passerelle" },
-  { name: "OPENROUTER_API_KEY", label: "OpenRouter", usage: "Texte + vidéo — 2e dans la cascade vidéo ; pool de relais + modèles de secours" },
+  { name: "OPENAI_API_KEY", label: "OpenAI (GPT)", usage: "Storyboards et analyses IA — prioritaire sur OpenRouter / passerelle Lovable" },
+  { name: "OPENROUTER_API_KEY", label: "OpenRouter", usage: "Texte (si pas de clé OpenAI) + vidéo — 2e dans la cascade vidéo ; pool de relais + modèles de secours" },
   { name: "RUNWAY_API_KEY", label: "Runway Dev", usage: "Génération vidéo — 3e dans la cascade" },
   { name: "KLING_API_KEY", label: "Kling AI", usage: "Génération vidéo — 4e dans la cascade (api-singapore.klingai.com)" },
   { name: "GOOGLE_API_KEY", label: "Google (Gemini / Veo)", usage: "Vidéo Veo — 1er dans la cascade providers" },
@@ -403,6 +404,7 @@ export const adminGetSettings = createServerFn({ method: "GET" })
       videoModel: c.videoModel,
       textModel: c.textModel,
       openaiModel: c.openaiModel,
+      openaiConfigured: !!c.openaiKey,
       googleVideoModel: c.googleVideoModel,
       runwayVideoModel: c.runwayVideoModel,
       runwayConfigured: !!c.runwayKey,
@@ -425,7 +427,12 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
       .object({
         videoModel: z.string().trim().min(3).max(120),
         textModel: z.string().trim().min(3).max(120),
-        openaiModel: z.string().trim().min(3).max(120),
+        openaiModel: z
+          .string()
+          .trim()
+          .min(3)
+          .max(120)
+          .refine((id) => OPENAI_MODEL_IDS.has(id.replace(/^openai\//, "")), "Modèle OpenAI inconnu"),
         googleVideoModel: z.string().trim().min(3).max(120),
         runwayVideoModel: z
           .string()
@@ -461,7 +468,7 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
     const rows = [
       { key: "video_model", value: data.videoModel },
       { key: "text_model", value: data.textModel },
-      { key: "openai_model", value: data.openaiModel },
+      { key: "openai_model", value: data.openaiModel.replace(/^openai\//, "") },
       { key: "google_video_model", value: data.googleVideoModel },
       { key: "runway_video_model", value: data.runwayVideoModel },
       { key: "kling_video_model", value: data.klingVideoModel },

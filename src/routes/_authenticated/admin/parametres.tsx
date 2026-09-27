@@ -11,6 +11,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { RUNWAY_MODELS } from "@/lib/runway-models";
 import { KLING_MODELS } from "@/lib/kling-models";
+import { OPENAI_MODELS, OPENAI_MODEL_IDS, DEFAULT_OPENAI_MODEL } from "@/lib/openai-models";
 
 export const Route = createFileRoute("/_authenticated/admin/parametres")({ component: SettingsPage });
 
@@ -23,7 +24,7 @@ function SettingsPage() {
   const qc = useQueryClient();
   const { data } = useQuery({ queryKey: ["admin", "settings"], queryFn: () => get() });
   const [s, setS] = useState<null | {
-    videoModel: string; textModel: string; openaiModel: string; googleVideoModel: string;
+    videoModel: string; textModel: string; openaiModel: string; openaiConfigured: boolean; googleVideoModel: string;
     runwayVideoModel: string; runwayConfigured: boolean; klingVideoModel: string; klingConfigured: boolean;
     openrouterModel: string; openrouterConfigured: boolean;
     openrouterVideoModel: string; maxDuration: number; generationEnabled: boolean; allowedResolutions: Res[];
@@ -35,13 +36,19 @@ function SettingsPage() {
   const { data: orModels = [] } = useQuery({ queryKey: ["admin", "openrouter-models"], queryFn: () => listOr(), staleTime: 3600_000 });
   const listOrV = useServerFn(adminListOpenRouterVideoModels);
   const { data: orVideo = [] } = useQuery({ queryKey: ["admin", "openrouter-video"], queryFn: () => listOrV(), staleTime: 3600_000 });
-  useEffect(() => { if (data) setS({ ...data, allowedResolutions: data.allowedResolutions as Res[] }); }, [data]);
+  useEffect(() => {
+    if (!data) return;
+    const openaiModel = OPENAI_MODEL_IDS.has(data.openaiModel.replace(/^openai\//, ""))
+      ? data.openaiModel.replace(/^openai\//, "")
+      : DEFAULT_OPENAI_MODEL;
+    setS({ ...data, openaiModel, allowedResolutions: data.allowedResolutions as Res[] });
+  }, [data]);
   if (!s) return <p className="text-sm text-muted-foreground">Chargement…</p>;
 
   const submit = async () => {
     setBusy(true);
     try {
-      const { runwayConfigured: _rc, openrouterConfigured: _oc, klingConfigured: _kc, ...payload } = s;
+      const { runwayConfigured: _rc, openrouterConfigured: _oc, klingConfigured: _kc, openaiConfigured: _oai, ...payload } = s;
       await save({ data: payload });
       toast.success("Paramètres enregistrés");
       qc.invalidateQueries({ queryKey: ["admin", "settings"] });
@@ -99,7 +106,7 @@ function SettingsPage() {
         </p>
       </div>
       <div className="space-y-2">
-        <Label>Modèle OpenRouter {s.openrouterConfigured ? "(actif pour les textes)" : "(si clé OpenRouter définie)"} · {orModels.length} modèles</Label>
+        <Label>Modèle OpenRouter {s.openrouterConfigured && !s.openaiConfigured ? "(actif pour les textes)" : s.openrouterConfigured ? "(texte en secours si pas d'OpenAI)" : "(si clé OpenRouter définie)"} · {orModels.length} modèles</Label>
         <Input list="or-models" value={s.openrouterModel} onChange={(e) => setS({ ...s, openrouterModel: e.target.value })} placeholder="Rechercher un modèle…" />
         <datalist id="or-models">
           {orModels.map((m) => (
@@ -134,8 +141,23 @@ function SettingsPage() {
         </p>
       </div>
       <div className="space-y-2">
-        <Label>Modèle GPT OpenAI (si clé OpenAI définie)</Label>
-        <Input value={s.openaiModel} onChange={(e) => setS({ ...s, openaiModel: e.target.value })} />
+        <Label>
+          Modèle GPT OpenAI {s.openaiConfigured ? "(actif pour les textes)" : "(si clé OpenAI définie)"} · {OPENAI_MODELS.length} modèles
+        </Label>
+        <select
+          className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+          value={s.openaiModel}
+          onChange={(e) => setS({ ...s, openaiModel: e.target.value })}
+        >
+          {OPENAI_MODELS.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.label} · {m.tier} · {m.id}
+            </option>
+          ))}
+        </select>
+        <p className="text-xs text-muted-foreground">
+          Cascade texte : OpenAI → OpenRouter → Lovable. En cas de modèle indisponible (404/403), bascule auto Sol → Luna → 5.6 Terra → …
+        </p>
       </div>
       <div className="space-y-2">
         <Label>Durée maximale d'une vidéo (secondes, 5–10 appliqués au clip unitaire)</Label>

@@ -1,4 +1,8 @@
 import { DEFAULT_KLING_MODEL as DEFAULT_KLING_VIDEO_MODEL, DEFAULT_KLING_VIDEO_FALLBACKS } from "./kling-models";
+import {
+  DEFAULT_OPENAI_MODEL,
+  DEFAULT_OPENAI_FALLBACKS,
+} from "./openai-models";
 import { BRAND, BRAND_URL } from "./brand";
 
 export const GATEWAY = "https://ai.gateway.lovable.dev/v1";
@@ -24,7 +28,7 @@ export const DEFAULT_OPENROUTER_VIDEO_FALLBACKS = [
   "kwaivgi/kling-v3.0-std",
   "kwaivgi/kling-v3.0-pro",
 ];
-export const DEFAULT_OPENAI_MODEL = "gpt-5-mini";
+export { DEFAULT_OPENAI_MODEL, DEFAULT_OPENAI_FALLBACKS };
 export const DEFAULT_GOOGLE_VIDEO_MODEL = "veo-3.1-lite-generate-preview";
 export const DEFAULT_GOOGLE_VIDEO_FALLBACKS = [
   "veo-3.1-fast-generate-preview",
@@ -65,6 +69,7 @@ export type GatewayConfig = {
   videoModel: string;
   textModel: string;
   openaiModel: string;
+  openaiFallbacks: string[];
   googleVideoModel: string;
   maxDuration: number;
   generationEnabled: boolean;
@@ -131,6 +136,11 @@ export async function getGatewayConfig(): Promise<GatewayConfig> {
     videoModel: c["video_model"] || DEFAULT_VIDEO_MODEL,
     textModel: c["text_model"] || DEFAULT_TEXT_MODEL,
     openaiModel: c["openai_model"] || DEFAULT_OPENAI_MODEL,
+    openaiFallbacks: (() => {
+      const configured = splitList(c["openai_fallback_models"]);
+      if (configured.length) return configured;
+      return openaiKey ? DEFAULT_OPENAI_FALLBACKS : [];
+    })(),
     googleVideoModel: c["google_video_model"] || DEFAULT_GOOGLE_VIDEO_MODEL,
     googleVideoFallbacks: (() => {
       const configured = splitList(c["google_video_fallbacks"]);
@@ -162,9 +172,43 @@ export async function hasAiProviderKeys(): Promise<boolean> {
   }
 }
 
-/** Text model: OpenRouter, then direct OpenAI when an OpenAI key is set, otherwise Lovable AI Gateway. */
+/** Text model: direct OpenAI when keyed, then OpenRouter, otherwise Lovable AI Gateway. */
 export async function textModel(cfg: GatewayConfig) {
   const { createOpenAI } = await import("@ai-sdk/openai");
+  if (cfg.openaiKey) {
+    const primary = cfg.openaiModel.replace(/^openai\//, "");
+    const fallbacks = cfg.openaiFallbacks
+      .map((m) => m.replace(/^openai\//, ""))
+      .filter((m) => m && m !== primary);
+    const provider = createOpenAI({
+      apiKey: cfg.openaiKey,
+      // On 404 / model unavailable, try the next configured OpenAI model.
+      fetch: async (input, init) => {
+        let body: Record<string, unknown> | null = null;
+        if (init?.body && typeof init.body === "string") {
+          try {
+            body = JSON.parse(init.body);
+          } catch {
+            /* ignore invalid JSON */
+          }
+        }
+        if (!body || typeof body["model"] !== "string") return fetch(input, init);
+        const models = [String(body["model"]), ...fallbacks.filter((m) => m !== body!["model"])];
+        let last: Response | null = null;
+        for (const model of models) {
+          const res = await fetch(input, { ...init, body: JSON.stringify({ ...body, model }) });
+          last = res;
+          if (res.ok || (res.status !== 404 && res.status !== 403)) return res;
+          console.warn("openai model unavailable, trying next", model, res.status);
+        }
+        return last!;
+      },
+    });
+    return {
+      model: provider.responses(primary),
+      providerOptions: { openai: { reasoningEffort: "low", store: false } },
+    };
+  }
   if (cfg.openrouterKey) {
     const provider = createOpenAI({
       baseURL: OPENROUTER_API,
@@ -190,13 +234,6 @@ export async function textModel(cfg: GatewayConfig) {
       },
     });
     return { model: provider.chat(cfg.openrouterModel), providerOptions: {} };
-  }
-  if (cfg.openaiKey) {
-    const provider = createOpenAI({ apiKey: cfg.openaiKey });
-    return {
-      model: provider.responses(cfg.openaiModel.replace(/^openai\//, "")),
-      providerOptions: { openai: { reasoningEffort: "low", store: false } },
-    };
   }
   if (!cfg.apiKey) throw new Error("Aucune clé configurée pour les storyboards.");
   const provider = createOpenAI({
