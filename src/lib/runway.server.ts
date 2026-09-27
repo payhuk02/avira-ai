@@ -123,14 +123,16 @@ export async function runwayCreate(
       .filter(Boolean)
       .slice(0, 3)
       .join(" · ");
-    // 412 = not enough credits for this model/task — another cheaper model or key may still work.
+    // 412 = not enough credits for this model/task — rotator will try the next model/key.
     const noCredits = res.status === 412 || /enough credits|insufficient credit/i.test(msg);
     if (noCredits) {
-      msg = `Crédits Runway insuffisants pour ${m.id}. Rechargez sur dev.runwayml.com, ou la cascade essaie un autre modèle / provider.`;
+      msg = `crédits insuffisants (${m.id})`;
     } else if (res.status === 400 || /validation of body failed/i.test(msg)) {
       msg = issueHint
-        ? `Paramètres Runway invalides (${m.id}) — ${issueHint}`
-        : `Paramètres Runway invalides pour ${m.id}. Essai d'un autre modèle…`;
+        ? `paramètres invalides (${m.id}) — ${issueHint}`
+        : `paramètres invalides (${m.id})`;
+    } else {
+      msg = `${m.id}: ${msg}`;
     }
     console.error("runway create failed", m.id, res.status, text.slice(0, 400));
     return { error: msg, status: noCredits ? 412 : res.status };
@@ -141,6 +143,7 @@ export async function runwayCreate(
 /**
  * Outer loop = models, inner = keys (like OpenRouter).
  * 400/404/412/429 → try next key then next model. 401/403 → mark key dead.
+ * On total failure, error lists every model that was attempted.
  */
 export async function runwayCreateRotating(
   keys: string[],
@@ -152,11 +155,13 @@ export async function runwayCreateRotating(
   if (!usable.length) return { error: "Aucune clé Runway configurée.", status: 401 };
   let last: { error: string; status: number } | null = null;
   const dead = new Set<number>();
+  const tried: string[] = [];
   for (const model of models) {
     for (let i = 0; i < usable.length; i++) {
       if (dead.has(i)) continue;
       const r = await runwayCreate(usable[i]!, model, opts);
       if (!("error" in r)) return { id: r.id, keyIndex: i };
+      if (!tried.includes(model)) tried.push(model);
       last = { error: r.error, status: r.status };
       if (RUNWAY_KEY_DEAD.has(r.status)) {
         dead.add(i);
@@ -167,10 +172,17 @@ export async function runwayCreateRotating(
         console.warn("runway model/key retry", { keyIndex: i, model, status: r.status });
         continue;
       }
-      return last;
+      return {
+        error: `${r.error} (après ${tried.length} modèle${tried.length > 1 ? "s" : ""} : ${tried.join(" → ")})`,
+        status: r.status,
+      };
     }
   }
-  return last ?? { error: "La génération Runway a échoué.", status: 502 };
+  const summary =
+    tried.length > 1
+      ? `${tried.length} modèles essayés (${tried.join(" → ")}) — tous en échec (solde org à 0 ou insuffisant). Rechargez sur dev.runwayml.com.`
+      : `${last?.error ?? "échec"}. Rechargez sur dev.runwayml.com.`;
+  return { error: summary, status: last?.status ?? 502 };
 }
 
 export async function runwayFetch(key: string, id: string) {

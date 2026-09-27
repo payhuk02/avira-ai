@@ -36,17 +36,17 @@ export const DEFAULT_GOOGLE_VIDEO_FALLBACKS = [
   "veo-3.1-generate-preview",
 ];
 export const DEFAULT_RUNWAY_VIDEO_MODEL = "gen4.5";
-/** Tried after the configured Runway model when that model fails (404 / model-specific). */
+/** Tried after the configured Runway model (cheaper / lighter models first when primary fails). */
 export const DEFAULT_RUNWAY_VIDEO_FALLBACKS = [
-  "gen4.5",
-  "veo3.1_fast",
   "seedance2_mini",
-  "seedance2_fast",
-  "gemini_omni_flash",
-  "hailuo3",
-  "happyhorse_1_0",
-  "grok_imagine_1_5",
   "wan3",
+  "hailuo3",
+  "gemini_omni_flash",
+  "veo3.1_fast",
+  "grok_imagine_1_5",
+  "happyhorse_1_0",
+  "seedance2_fast",
+  "gen4.5",
 ];
 export { DEFAULT_KLING_VIDEO_MODEL, DEFAULT_KLING_VIDEO_FALLBACKS };
 export { DEFAULT_FAL_VIDEO_MODEL, DEFAULT_FAL_VIDEO_FALLBACKS };

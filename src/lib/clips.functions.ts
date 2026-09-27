@@ -85,7 +85,11 @@ async function tryOpenRouterVideo(cfg: GatewayCfg, opts: ClipGenOpts): Promise<{
 
 async function tryRunwayVideo(cfg: GatewayCfg, opts: ClipGenOpts): Promise<{ jobId: string } | { status: number; error: string } | null> {
   if (!cfg.runwayKeys.length) return null;
-  const models = [...new Set([cfg.runwayVideoModel, ...cfg.runwayVideoFallbacks].filter(Boolean))];
+  // Primary first, then fallbacks (skip duplicate of primary).
+  const models = [
+    cfg.runwayVideoModel,
+    ...cfg.runwayVideoFallbacks.filter((m) => m && m !== cfg.runwayVideoModel),
+  ].filter(Boolean);
   const r = await runwayCreateRotating(cfg.runwayKeys, models, opts);
   if ("error" in r) return { status: r.status, error: r.error };
   return { jobId: `runway:${r.keyIndex}:${r.id}` };
