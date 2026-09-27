@@ -126,7 +126,8 @@ GRANT ALL ON public.admin_audit_log TO service_role;
 ALTER TABLE public.admin_audit_log ENABLE ROW LEVEL SECURITY;
 CREATE INDEX IF NOT EXISTS admin_audit_log_created_idx ON public.admin_audit_log (created_at DESC);
 
--- Bootstrap admin after first signup (replace email):
+-- Bootstrap admin after first signup (replace email). See AGENTS.md § Bootstrap admin.
+-- Enable MFA on the Auth user in the Supabase dashboard when available.
 -- INSERT INTO public.user_roles (user_id, role)
 -- SELECT id, 'admin'::public.app_role FROM auth.users WHERE lower(email) = 'votre@email.com'
 -- ON CONFLICT DO NOTHING;

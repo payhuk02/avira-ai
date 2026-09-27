@@ -86,7 +86,7 @@ function Library() {
     setNotice(null);
     try {
       const res = await share({ data: { clipId: clip.id, enabled } });
-      patchClip(clip.id, { share_token: res.token });
+      patchClip(clip.id, { share_token: res.token, share_expires_at: res.expiresAt });
     } catch (e) {
       setNotice((e as Error).message);
     } finally {
@@ -353,13 +353,18 @@ function Library() {
                         <Copy className="size-3" /> {copied ? "Copié" : "Copier"}
                       </button>
                     </div>
+                    {open.share_expires_at && (
+                      <p className="text-[10px] text-muted-foreground">
+                        Expire le {new Date(open.share_expires_at).toLocaleString("fr-FR")}
+                      </p>
+                    )}
                     <button onClick={() => toggleShare(open, false)} disabled={busy !== null} className="text-[11px] text-muted-foreground hover:text-destructive">
                       Désactiver le lien
                     </button>
                   </div>
                 ) : (
                   <>
-                    <p className="mt-1 text-[11px] text-muted-foreground">Toute personne ayant le lien pourra regarder ce clip.</p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">Lien public valable 7 jours. Toute personne ayant le lien pourra regarder ce clip.</p>
                     <button onClick={() => toggleShare(open, true)} disabled={busy !== null} className="mt-2 rounded-full bg-primary px-3 py-1 text-[11px] text-primary-foreground disabled:opacity-50">
                       {busy === "share" ? "Création…" : "Créer un lien public"}
                     </button>

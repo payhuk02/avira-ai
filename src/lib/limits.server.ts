@@ -53,12 +53,6 @@ export async function getUsageLimits(): Promise<UsageLimits> {
   }
 }
 
-function dayStartIso() {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString();
-}
-
 function todayUtcDate() {
   return new Date().toISOString().slice(0, 10);
 }
@@ -73,29 +67,17 @@ async function monthCostCredits(limits: UsageLimits): Promise<number> {
   const { data: clips } = await supabaseAdmin
     .from("clips")
     .select("status, duration")
+    .eq("status", "done")
     .gte("created_at", since);
   const { count: boards } = await supabaseAdmin
     .from("storyboards")
     .select("id", { count: "exact", head: true })
     .gte("created_at", since);
-  const video = (clips ?? [])
-    .filter((c) => c.status !== "failed")
-    .reduce((s, c) => s + (c.duration ?? 0) * limits.costPerVideoSecond, 0);
+  const video = (clips ?? []).reduce((s, c) => s + (c.duration ?? 0) * limits.costPerVideoSecond, 0);
   return video + (boards ?? 0) * limits.costPerStoryboard;
 }
 
-async function countToday(userId: string, table: "clips" | "storyboards"): Promise<number> {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const { count, error } = await supabaseAdmin
-    .from(table)
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", userId)
-    .gte("created_at", dayStartIso());
-  if (error) throw new Error(error.message);
-  return count ?? 0;
-}
-
-async function counterToday(subjectId: string, kind: "assist" | "voiceover" | "share"): Promise<number> {
+async function counterToday(subjectId: string, kind: string): Promise<number> {
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
   const { data, error } = await supabaseAdmin
     .from("usage_counters")
@@ -105,7 +87,6 @@ async function counterToday(subjectId: string, kind: "assist" | "voiceover" | "s
     .eq("kind", kind)
     .maybeSingle();
   if (error) {
-    // Table pas encore migrée : fallback app_config temporaire
     if (error.code === "PGRST205" || /usage_counters/i.test(error.message)) {
       const key = `usage_${kind}_${todayUtcDate()}_${subjectId}`;
       const { data: row } = await supabaseAdmin.from("app_config").select("value").eq("key", key).maybeSingle();
@@ -116,34 +97,80 @@ async function counterToday(subjectId: string, kind: "assist" | "voiceover" | "s
   return data?.count ?? 0;
 }
 
-async function bumpCounter(subjectId: string, kind: "assist" | "voiceover" | "share"): Promise<number> {
+/** Réserve un slot sous plafond (atomique via RPC). Retourne false si plein. */
+async function reserveSlot(subjectId: string, kind: string, cap: number): Promise<boolean> {
+  if (cap <= 0) return false;
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const day = todayUtcDate();
-  const current = await counterToday(subjectId, kind);
-  const next = current + 1;
-  const { error } = await supabaseAdmin.from("usage_counters").upsert(
-    { subject_id: subjectId, day, kind, count: next, updated_at: new Date().toISOString() },
-    { onConflict: "subject_id,day,kind" },
-  );
-  if (error) {
-    if (error.code === "PGRST205" || /usage_counters/i.test(error.message)) {
-      const key = `usage_${kind}_${day}_${subjectId}`;
-      await supabaseAdmin.from("app_config").upsert({
-        key,
-        value: String(next),
-        is_secret: false,
-        updated_at: new Date().toISOString(),
-      });
-      return next;
+  const { data, error } = await supabaseAdmin.rpc("reserve_usage", {
+    _subject_id: subjectId,
+    _kind: kind,
+    _cap: cap,
+  });
+  if (!error) return data !== null && data !== undefined;
+
+  // Fallback si migration pas encore appliquée : read-modify-write (meilleur effort).
+  if (error.code === "PGRST202" || /reserve_usage|function/i.test(error.message)) {
+    const current = await counterToday(subjectId, kind);
+    if (current >= cap) return false;
+    const day = todayUtcDate();
+    const next = current + 1;
+    const { error: upErr } = await supabaseAdmin.from("usage_counters").upsert(
+      { subject_id: subjectId, day, kind, count: next, updated_at: new Date().toISOString() },
+      { onConflict: "subject_id,day,kind" },
+    );
+    if (upErr) {
+      if (upErr.code === "PGRST205" || /usage_counters/i.test(upErr.message)) {
+        await supabaseAdmin.from("app_config").upsert({
+          key: `usage_${kind}_${day}_${subjectId}`,
+          value: String(next),
+          is_secret: false,
+          updated_at: new Date().toISOString(),
+        });
+        return true;
+      }
+      throw new Error(upErr.message);
     }
-    throw new Error(error.message);
+    return true;
   }
-  return next;
+  throw new Error(error.message);
+}
+
+/** Libère un slot réservé (échec génération). */
+export async function releaseUsage(userId: string, kind: UsageKind): Promise<void> {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { error } = await supabaseAdmin.rpc("release_usage", {
+    _subject_id: userId,
+    _kind: kind,
+  });
+  if (!error) return;
+  if (error.code === "PGRST202" || /release_usage|function/i.test(error.message)) {
+    const day = todayUtcDate();
+    const current = await counterToday(userId, kind);
+    if (current <= 0) return;
+    const next = current - 1;
+    await supabaseAdmin.from("usage_counters").upsert(
+      { subject_id: userId, day, kind, count: next, updated_at: new Date().toISOString() },
+      { onConflict: "subject_id,day,kind" },
+    );
+    return;
+  }
+  console.error("releaseUsage failed", error.message);
+}
+
+function quotaMessage(kind: UsageKind, cap: number) {
+  const labels: Record<UsageKind, string> = {
+    clip: "clips",
+    storyboard: "storyboards",
+    assist: "aides IA",
+    voiceover: "voix off",
+  };
+  return `Quota journalier atteint (${cap} ${labels[kind]} / jour). Réessayez demain.`;
 }
 
 /**
  * Ensures generation is enabled, platform budget is not exhausted,
- * and the user is within their daily quota for the given action.
+ * and atomically reserves a daily quota slot for the action.
+ * Call releaseUsage(userId, kind) if the action fails after reservation.
  */
 export async function assertUsageAllowed(userId: string, kind: UsageKind): Promise<GatewayConfig> {
   const cfg = await requireGeneration();
@@ -156,43 +183,36 @@ export async function assertUsageAllowed(userId: string, kind: UsageKind): Promi
     }
   }
 
-  if (kind === "clip") {
-    if (limits.dailyClipLimit <= 0) throw new Error("La génération de clips est désactivée.");
-    const n = await countToday(userId, "clips");
-    if (n >= limits.dailyClipLimit) {
-      throw new Error(`Quota journalier atteint (${limits.dailyClipLimit} clips / jour). Réessayez demain.`);
-    }
-  } else if (kind === "storyboard") {
-    if (limits.dailyStoryboardLimit <= 0) throw new Error("La génération de storyboards est désactivée.");
-    const n = await countToday(userId, "storyboards");
-    if (n >= limits.dailyStoryboardLimit) {
-      throw new Error(`Quota journalier atteint (${limits.dailyStoryboardLimit} storyboards / jour). Réessayez demain.`);
-    }
-  } else if (kind === "assist") {
-    if (limits.dailyAssistLimit <= 0) throw new Error("Les assistants IA sont désactivés.");
-    const n = await counterToday(userId, "assist");
-    if (n >= limits.dailyAssistLimit) {
-      throw new Error(`Quota journalier atteint (${limits.dailyAssistLimit} aides IA / jour). Réessayez demain.`);
-    }
-    await bumpCounter(userId, "assist");
-  } else if (kind === "voiceover") {
-    if (limits.dailyVoiceoverLimit <= 0) throw new Error("La voix off IA est désactivée.");
-    const n = await counterToday(userId, "voiceover");
-    if (n >= limits.dailyVoiceoverLimit) {
-      throw new Error(`Quota journalier atteint (${limits.dailyVoiceoverLimit} voix off / jour). Réessayez demain.`);
-    }
-    await bumpCounter(userId, "voiceover");
-  }
+  const caps: Record<UsageKind, number> = {
+    clip: limits.dailyClipLimit,
+    storyboard: limits.dailyStoryboardLimit,
+    assist: limits.dailyAssistLimit,
+    voiceover: limits.dailyVoiceoverLimit,
+  };
+  const disabled: Record<UsageKind, string> = {
+    clip: "La génération de clips est désactivée.",
+    storyboard: "La génération de storyboards est désactivée.",
+    assist: "Les assistants IA sont désactivés.",
+    voiceover: "La voix off IA est désactivée.",
+  };
+
+  const cap = caps[kind];
+  if (cap <= 0) throw new Error(disabled[kind]);
+  const ok = await reserveSlot(userId, kind, cap);
+  if (!ok) throw new Error(quotaMessage(kind, cap));
 
   return cfg;
 }
 
-/** Limite les lectures de liens de partage (anti-scrape). */
-export async function assertShareAllowed(token: string, dailyCap = 200) {
-  const subject = `share:${token.slice(0, 24)}`;
-  const n = await counterToday(subject, "share");
-  if (n >= dailyCap) throw new Error("Trop de consultations pour ce lien aujourd'hui.");
-  await bumpCounter(subject, "share");
+/** Limite les lectures de liens de partage (anti-scrape, multi-instance via DB). */
+export async function assertShareAllowed(token: string, dailyCap = 200, perMinuteCap = 30) {
+  const fp = token.slice(0, 24);
+  // Fenêtre 1 minute partagée entre replicas (subject inclut YYYY-MM-DDTHH:MM UTC).
+  const minuteKey = new Date().toISOString().slice(0, 16);
+  const okMin = await reserveSlot(`share_m:${fp}:${minuteKey}`, "share", perMinuteCap);
+  if (!okMin) throw new Error("Trop de consultations pour ce lien. Réessayez dans une minute.");
+  const okDay = await reserveSlot(`share:${fp}`, "share", dailyCap);
+  if (!okDay) throw new Error("Trop de consultations pour ce lien aujourd'hui.");
 }
 
 export async function getPublicStudioLimits() {

@@ -2,7 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { textModel } from "./gateway.server";
-import { assertUsageAllowed } from "./limits.server";
+import { assertUsageAllowed, releaseUsage } from "./limits.server";
 
 export type Scene = {
   number: number;
@@ -65,9 +65,11 @@ export const generateStoryboard = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { streamText, Output, NoObjectGeneratedError } = await import("ai");
+    let reserved = false;
     let cfg;
     try {
       cfg = await assertUsageAllowed(context.userId, "storyboard");
+      reserved = true;
     } catch (e) {
       return { error: (e as Error).message, board: null };
     }
@@ -85,6 +87,8 @@ export const generateStoryboard = createServerFn({ method: "POST" })
     try {
       board = await result.output;
     } catch (e) {
+      await releaseUsage(context.userId, "storyboard");
+      reserved = false;
       if (NoObjectGeneratedError.isInstance(e)) {
         return { error: "Le storyboard n'a pas pu être structuré. Reformulez votre idée.", board: null };
       }
@@ -113,7 +117,12 @@ export const generateStoryboard = createServerFn({ method: "POST" })
       })
       .select()
       .single();
-    if (error) throw new Error(error.message);
+    if (error) {
+      await releaseUsage(context.userId, "storyboard");
+      reserved = false;
+      throw new Error(error.message);
+    }
+    void reserved;
     return { error: null, board: row as unknown as StoryboardRow };
   });
 

@@ -82,6 +82,7 @@ export type Database = {
           resolution: string
           scene: string
           share_token: string | null
+          share_expires_at: string | null
           status: string
           storage_path: string | null
           style_preset: string | null
@@ -100,6 +101,7 @@ export type Database = {
           resolution?: string
           scene: string
           share_token?: string | null
+          share_expires_at?: string | null
           status?: string
           storage_path?: string | null
           style_preset?: string | null
@@ -118,6 +120,7 @@ export type Database = {
           resolution?: string
           scene?: string
           share_token?: string | null
+          share_expires_at?: string | null
           status?: string
           storage_path?: string | null
           style_preset?: string | null
@@ -214,6 +217,45 @@ export type Database = {
         }
         Relationships: []
       }
+      generation_events: {
+        Row: {
+          id: string
+          user_id: string | null
+          clip_id: string | null
+          provider: string
+          model: string
+          outcome: string
+          http_status: number | null
+          latency_ms: number | null
+          error: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          clip_id?: string | null
+          provider?: string
+          model?: string
+          outcome: string
+          http_status?: number | null
+          latency_ms?: number | null
+          error?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string | null
+          clip_id?: string | null
+          provider?: string
+          model?: string
+          outcome?: string
+          http_status?: number | null
+          latency_ms?: number | null
+          error?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -246,6 +288,21 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      reserve_usage: {
+        Args: {
+          _subject_id: string
+          _kind: string
+          _cap: number
+        }
+        Returns: number
+      }
+      release_usage: {
+        Args: {
+          _subject_id: string
+          _kind: string
+        }
+        Returns: number
       }
     }
     Enums: {

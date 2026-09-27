@@ -710,6 +710,33 @@ export const adminAuditLog = createServerFn({ method: "GET" })
     }>;
   });
 
+export const adminGenerationEvents = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    const admin = await assertAdmin(context);
+    const { data, error } = await admin
+      .from("generation_events")
+      .select("id, provider, model, outcome, http_status, latency_ms, error, clip_id, user_id, created_at")
+      .order("created_at", { ascending: false })
+      .limit(200);
+    if (error) {
+      if (error.code === "PGRST205" || /generation_events/i.test(error.message)) return [];
+      throw new Error(error.message);
+    }
+    return (data ?? []) as Array<{
+      id: string;
+      provider: string;
+      model: string;
+      outcome: string;
+      http_status: number | null;
+      latency_ms: number | null;
+      error: string | null;
+      clip_id: string | null;
+      user_id: string | null;
+      created_at: string;
+    }>;
+  });
+
 /* ---------- AI insights ---------- */
 
 export const adminAskInsights = createServerFn({ method: "POST" })

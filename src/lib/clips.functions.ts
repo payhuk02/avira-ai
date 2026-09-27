@@ -6,8 +6,24 @@ import { klingCreate, klingFetch } from "./kling.server";
 import { falCreate, falFetch, falEncodeModel, falDecodeModel } from "./fal.server";
 import { openrouterVideoCreate, openrouterVideoFetch } from "./openrouter.server";
 import { GATEWAY, GOOGLE_API, gatewayMessage, getGatewayConfig, DEFAULT_GOOGLE_VIDEO_MODEL, DEFAULT_GOOGLE_VIDEO_FALLBACKS } from "./gateway.server";
-import { assertUsageAllowed } from "./limits.server";
+import { assertUsageAllowed, releaseUsage } from "./limits.server";
+import { logGenerationEvent } from "./generation.server";
 import { BRAND_SLUG } from "./brand";
+
+async function assertOwnProject(
+  supabase: { from: (t: string) => any },
+  userId: string,
+  projectId: string | null | undefined,
+) {
+  if (!projectId) return;
+  const { data } = await supabase
+    .from("projects")
+    .select("id")
+    .eq("id", projectId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!data) throw new Error("Projet introuvable.");
+}
 
 export type ClipRow = {
   id: string;
@@ -24,6 +40,7 @@ export type ClipRow = {
   style_preset: string | null;
   project_id?: string | null;
   share_token?: string | null;
+  share_expires_at?: string | null;
   created_at: string;
   url?: string | null;
 };
@@ -63,8 +80,10 @@ export const createClip = createServerFn({ method: "POST" })
 
 /** Statuses that mean "this provider has no usable credit / quota / auth" → try the next one.
  * 412 = Runway Dev "You do not have enough credits to run this task."
- * 400 = model-specific body validation — another provider may accept the same clip. */
-const PROVIDER_EXHAUSTED = new Set([400, 401, 402, 403, 412, 429]);
+ * 400 stays in-provider (model rotation) but does NOT cascade to the next provider. */
+const PROVIDER_EXHAUSTED = new Set([401, 402, 403, 412, 429]);
+/** Model-level retry within the same provider (validation / unknown model). */
+const MODEL_RETRY = new Set([400, 404, 401, 402, 403, 412, 429]);
 
 type ClipGenOpts = {
   prompt: string;
@@ -140,7 +159,7 @@ async function tryGoogleVideo(cfg: GatewayCfg, opts: ClipGenOpts): Promise<{ job
     last = { status: res.status, error: gatewayMessage(res.status, msg) };
     // Same API key: auth/billing failures won't recover on another Veo model.
     if (res.status === 401 || res.status === 402 || res.status === 403) break;
-    if (!PROVIDER_EXHAUSTED.has(res.status) && res.status !== 404) break;
+    if (!MODEL_RETRY.has(res.status)) break;
   }
   return last;
 }
@@ -154,7 +173,7 @@ async function tryFalVideo(cfg: GatewayCfg, opts: ClipGenOpts): Promise<{ jobId:
     if (!("error" in r)) return { jobId: `fal:${falEncodeModel(r.model)}:${r.id}` };
     last = { status: r.status, error: r.error };
     if (r.status === 401 || r.status === 402 || r.status === 403) break;
-    if (!PROVIDER_EXHAUSTED.has(r.status) && r.status !== 404) break;
+    if (!MODEL_RETRY.has(r.status)) break;
     console.warn("fal model failed, trying next", model, r.status);
   }
   return last;
@@ -171,7 +190,7 @@ async function tryKlingVideo(cfg: GatewayCfg, opts: ClipGenOpts): Promise<{ jobI
     if (!("error" in r)) return { jobId: `kling:${r.id}` };
     last = { status: r.status, error: r.error };
     if (r.status === 401 || r.status === 402 || r.status === 403 || r.status === 429) break;
-    if (!PROVIDER_EXHAUSTED.has(r.status) && r.status !== 404) break;
+    if (!MODEL_RETRY.has(r.status)) break;
     console.warn("kling model failed, trying next", model, r.status);
   }
   return last;
@@ -218,6 +237,7 @@ async function tryLovableVideo(cfg: GatewayCfg, opts: ClipGenOpts): Promise<{ jo
 async function startClipAcrossProviders(
   cfg: GatewayCfg,
   opts: ClipGenOpts,
+  meta?: { userId?: string; clipId?: string },
 ): Promise<{ jobId: string } | { error: string }> {
   const attempts: string[] = [];
   const providers: Array<[string, () => Promise<{ jobId: string } | { status: number; error: string } | null>]> = [
@@ -230,10 +250,40 @@ async function startClipAcrossProviders(
   ];
 
   for (const [name, run] of providers) {
+    const t0 = Date.now();
     const result = await run();
-    if (!result) continue;
-    if ("jobId" in result) return { jobId: result.jobId };
+    const latencyMs = Date.now() - t0;
+    if (!result) {
+      await logGenerationEvent({
+        userId: meta?.userId,
+        clipId: meta?.clipId,
+        provider: name,
+        outcome: "skip",
+        latencyMs,
+      });
+      continue;
+    }
+    if ("jobId" in result) {
+      await logGenerationEvent({
+        userId: meta?.userId,
+        clipId: meta?.clipId,
+        provider: name,
+        outcome: "ok",
+        latencyMs,
+        model: result.jobId.split(":")[0],
+      });
+      return { jobId: result.jobId };
+    }
     attempts.push(`${name}: ${result.error}`);
+    await logGenerationEvent({
+      userId: meta?.userId,
+      clipId: meta?.clipId,
+      provider: name,
+      outcome: "error",
+      httpStatus: result.status,
+      latencyMs,
+      error: result.error,
+    });
     if (!PROVIDER_EXHAUSTED.has(result.status)) {
       return { error: result.error };
     }
@@ -252,54 +302,103 @@ async function startClipAcrossProviders(
 }
 
 async function startClip(data: z.infer<typeof clipInput>, context: { supabase: any; userId: string }) {
-  {
+  let reserved = false;
+  try {
     let cfg;
     try {
       cfg = await assertUsageAllowed(context.userId, "clip");
+      reserved = true;
     } catch (e) {
       return { error: (e as Error).message, clip: null };
     }
     const maxDur = Math.min(10, Math.max(5, cfg.maxDuration));
     if (data.duration > maxDur) {
+      await releaseUsage(context.userId, "clip");
+      reserved = false;
       return { error: `Durée maximale autorisée : ${maxDur} s.`, clip: null };
     }
-    const preset = STYLE_PRESETS.find((s) => s.id === data.stylePreset);
-    const effectivePrompt = preset ? `${data.prompt}, ${preset.suffix}` : data.prompt;
-    if (!cfg.allowedResolutions.includes(data.resolution))
+    if (!cfg.allowedResolutions.includes(data.resolution)) {
+      await releaseUsage(context.userId, "clip");
+      reserved = false;
       return { error: "Cette résolution est désactivée par l'administrateur.", clip: null };
+    }
+    try {
+      await assertOwnProject(context.supabase, context.userId, data.projectId);
+    } catch (e) {
+      await releaseUsage(context.userId, "clip");
+      reserved = false;
+      return { error: (e as Error).message, clip: null };
+    }
 
-    const started = await startClipAcrossProviders(cfg, {
-      prompt: effectivePrompt,
-      aspect: data.aspect,
-      resolution: data.resolution,
-      duration: data.duration,
-      ...(data.referenceImage ? { image: data.referenceImage } : {}),
-    });
-    if ("error" in started) return { error: started.error, clip: null };
-    const jobId = started.jobId;
-    const { data: row, error } = await context.supabase
+    const preset = STYLE_PRESETS.find((s) => s.id === data.stylePreset);
+    // Persist raw user prompt; apply style only at generation time (restyle stays clean).
+    const effectivePrompt = preset ? `${data.prompt}, ${preset.suffix}` : data.prompt;
+
+    const { data: row, error: insertErr } = await context.supabase
       .from("clips")
       .insert({
         user_id: context.userId,
-        job_id: jobId,
+        job_id: "local:pending",
         scene: data.scene,
-        prompt: effectivePrompt,
+        prompt: data.prompt,
         format: data.format,
         resolution: data.resolution,
         duration: Math.round(data.duration),
         style_preset: preset?.id ?? null,
         project_id: data.projectId ?? null,
+        status: "pending",
       })
       .select()
       .single();
-    if (error) throw new Error(error.message);
-    return { error: null as string | null, clip: row as ClipRow };
+    if (insertErr || !row) {
+      await releaseUsage(context.userId, "clip");
+      reserved = false;
+      throw new Error(insertErr?.message ?? "Impossible de créer le clip.");
+    }
+
+    const started = await startClipAcrossProviders(
+      cfg,
+      {
+        prompt: effectivePrompt,
+        aspect: data.aspect,
+        resolution: data.resolution,
+        duration: data.duration,
+        ...(data.referenceImage ? { image: data.referenceImage } : {}),
+      },
+      { userId: context.userId, clipId: row.id },
+    );
+
+    if ("error" in started) {
+      await context.supabase
+        .from("clips")
+        .update({ status: "failed", error: started.error, job_id: "local:failed" })
+        .eq("id", row.id);
+      await releaseUsage(context.userId, "clip");
+      reserved = false;
+      return { error: started.error, clip: null };
+    }
+
+    const { data: upd, error: updErr } = await context.supabase
+      .from("clips")
+      .update({ job_id: started.jobId })
+      .eq("id", row.id)
+      .select()
+      .single();
+    if (updErr) throw new Error(updErr.message);
+    reserved = false; // slot kept for successful start
+    return { error: null as string | null, clip: (upd ?? row) as ClipRow };
+  } catch (e) {
+    if (reserved) await releaseUsage(context.userId, "clip");
+    throw e;
   }
 }
 
 async function fetchJobVideo(jobId: string): Promise<
   { state: "pending" } | { state: "failed"; message: string } | { state: "done"; bytes: ArrayBuffer }
 > {
+  if (jobId.startsWith("local:")) {
+    return { state: "failed", message: "Le rendu n'a pas pu démarrer." };
+  }
   const cfg = await getGatewayConfig();
   if (jobId.startsWith("openrouter:")) {
     const rest = jobId.slice(11);
@@ -388,11 +487,30 @@ export const refreshClip = createServerFn({ method: "POST" })
       .upload(path, bytes, { contentType: "video/mp4", upsert: true });
     if (up.error) {
       console.error("upload failed", up.error);
-      return clip as ClipRow;
+      const retries = Number(String(clip.error ?? "").match(/^upload:(\d+)$/)?.[1] ?? 0) + 1;
+      if (retries >= 3) {
+        const { data: failed } = await sb
+          .from("clips")
+          .update({
+            status: "failed",
+            error: "Échec de l'enregistrement vidéo après plusieurs tentatives.",
+          })
+          .eq("id", clip.id)
+          .select()
+          .single();
+        return (failed ?? clip) as ClipRow;
+      }
+      const { data: retrying } = await sb
+        .from("clips")
+        .update({ error: `upload:${retries}` })
+        .eq("id", clip.id)
+        .select()
+        .single();
+      return (retrying ?? clip) as ClipRow;
     }
     const { data: upd } = await sb
       .from("clips")
-      .update({ status: "done", storage_path: path })
+      .update({ status: "done", storage_path: path, error: null })
       .eq("id", clip.id)
       .select()
       .single();
