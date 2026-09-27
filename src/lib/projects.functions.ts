@@ -116,19 +116,21 @@ export const getSharedClip = createServerFn({ method: "GET" })
     }
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const nowIso = new Date().toISOString();
-    let { data: clip, error: clipErr } = await supabaseAdmin
+    const first = await supabaseAdmin
       .from("clips")
       .select("scene, format, duration, resolution, storage_path, created_at, share_expires_at")
       .eq("share_token", data.token)
       .eq("status", "done")
       .maybeSingle();
-    if (clipErr && /share_expires_at/i.test(clipErr.message)) {
-      ({ data: clip } = await supabaseAdmin
+    let clip = first.data;
+    if (first.error && /share_expires_at/i.test(first.error.message)) {
+      const fallback = await supabaseAdmin
         .from("clips")
         .select("scene, format, duration, resolution, storage_path, created_at")
         .eq("share_token", data.token)
         .eq("status", "done")
-        .maybeSingle());
+        .maybeSingle();
+      clip = fallback.data as typeof clip;
     }
     if (!clip?.storage_path) return null;
     const expiresAt = (clip as { share_expires_at?: string | null }).share_expires_at;
