@@ -481,7 +481,7 @@ function Studio() {
                 <div className="mt-4 rounded-[10px] bg-destructive/10 px-4 py-3 text-sm text-destructive ring-1 ring-destructive/30">
                   <p className="font-medium">Aucune clé IA configurée</p>
                   <p className="mt-1 text-destructive/90">
-                    Ajoutez une clé (Lovable, OpenRouter, Runway ou Google) dans{" "}
+                    Ajoutez une clé (Lovable, OpenRouter, Runway, Kling ou Google) dans{" "}
                     <Link to="/admin/cles-api" className="underline underline-offset-2 hover:text-destructive">
                       Admin → Clés API
                     </Link>{" "}

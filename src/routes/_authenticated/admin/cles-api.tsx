@@ -29,7 +29,7 @@ function KeysPage() {
   );
 }
 
-function KeyCard({ k }: { k: { name: "LOVABLE_API_KEY" | "OPENAI_API_KEY" | "OPENROUTER_API_KEY" | "RUNWAY_API_KEY" | "GOOGLE_API_KEY"; label: string; usage: string; source: keyof typeof SOURCE; masked: string | null; updated_at: string | null } }) {
+function KeyCard({ k }: { k: { name: "LOVABLE_API_KEY" | "OPENAI_API_KEY" | "OPENROUTER_API_KEY" | "RUNWAY_API_KEY" | "KLING_API_KEY" | "GOOGLE_API_KEY"; label: string; usage: string; source: keyof typeof SOURCE; masked: string | null; updated_at: string | null } }) {
   const save = useServerFn(adminSetKey);
   const test = useServerFn(adminTestKey);
   const qc = useQueryClient();

@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { RUNWAY_MODELS } from "@/lib/runway-models";
+import { KLING_MODELS } from "@/lib/kling-models";
 
 export const Route = createFileRoute("/_authenticated/admin/parametres")({ component: SettingsPage });
 
@@ -23,7 +24,8 @@ function SettingsPage() {
   const { data } = useQuery({ queryKey: ["admin", "settings"], queryFn: () => get() });
   const [s, setS] = useState<null | {
     videoModel: string; textModel: string; openaiModel: string; googleVideoModel: string;
-    runwayVideoModel: string; runwayConfigured: boolean; openrouterModel: string; openrouterConfigured: boolean;
+    runwayVideoModel: string; runwayConfigured: boolean; klingVideoModel: string; klingConfigured: boolean;
+    openrouterModel: string; openrouterConfigured: boolean;
     openrouterVideoModel: string; maxDuration: number; generationEnabled: boolean; allowedResolutions: Res[];
     monthlyBudget: number; alertThreshold: number; costPerVideoSecond: number; costPerStoryboard: number;
     dailyClipLimit: number; dailyStoryboardLimit: number; dailyAssistLimit: number; dailyVoiceoverLimit: number;
@@ -39,7 +41,7 @@ function SettingsPage() {
   const submit = async () => {
     setBusy(true);
     try {
-      const { runwayConfigured: _rc, openrouterConfigured: _oc, ...payload } = s;
+      const { runwayConfigured: _rc, openrouterConfigured: _oc, klingConfigured: _kc, ...payload } = s;
       await save({ data: payload });
       toast.success("Paramètres enregistrés");
       qc.invalidateQueries({ queryKey: ["admin", "settings"] });
@@ -79,6 +81,24 @@ function SettingsPage() {
         <p className="text-xs text-muted-foreground">En cas d'échec modèle (404), bascule automatique vers Gen-4.5, Veo Fast, Seedance mini, etc.</p>
       </div>
       <div className="space-y-2">
+        <Label>Modèle vidéo Kling {s.klingConfigured ? "(4e dans la cascade)" : "(si clé Kling définie)"}</Label>
+        <select className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm"
+          value={s.klingVideoModel} onChange={(e) => setS({ ...s, klingVideoModel: e.target.value })}>
+          {KLING_MODELS.map((m) => {
+            const dur = m.durations ? `${m.durations.join("/")}s` : `${m.min ?? "?"}-${m.max ?? "?"}s`;
+            return (
+              <option key={m.id} value={m.id}>
+                {m.label} · {dur} · {m.resolutions.join(", ")} · {m.id}
+              </option>
+            );
+          })}
+        </select>
+        <p className="text-xs text-muted-foreground">
+          API <a className="underline" href="https://kling.ai/document-api/guides/get-started/overview" target="_blank" rel="noreferrer">Kling Open Platform</a>
+          {" "}· secours auto Turbo → 2.5 → 2.6 → 3.0.
+        </p>
+      </div>
+      <div className="space-y-2">
         <Label>Modèle OpenRouter {s.openrouterConfigured ? "(actif pour les textes)" : "(si clé OpenRouter définie)"} · {orModels.length} modèles</Label>
         <Input list="or-models" value={s.openrouterModel} onChange={(e) => setS({ ...s, openrouterModel: e.target.value })} placeholder="Rechercher un modèle…" />
         <datalist id="or-models">
@@ -96,7 +116,7 @@ function SettingsPage() {
             <option key={m.id} value={m.id}>{m.id} · {Math.min(...m.durations)}–{Math.max(...m.durations)} s · {m.resolutions.join(", ")}</option>
           ))}
         </select>
-        <p className="text-xs text-muted-foreground">Cascade vidéo : Google → OpenRouter (ce modèle + secours) → Runway → Lovable. Rotation automatique si crédits / quotas épuisés.</p>
+        <p className="text-xs text-muted-foreground">Cascade vidéo : Google → OpenRouter → Runway → Kling → Lovable. Rotation automatique si crédits / quotas épuisés.</p>
       </div>
       <div className="space-y-2">
         <Label>Modèle vidéo Google (Veo — si clé Google définie)</Label>

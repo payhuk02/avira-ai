@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { RUNWAY_MODEL_IDS } from "./runway-models";
+import { KLING_MODEL_IDS } from "./kling-models";
 
 async function audit(
   admin: any,
@@ -205,7 +206,8 @@ const KEYS = [
   { name: "LOVABLE_API_KEY", label: "Passerelle IA Lovable", usage: "Utilisée par défaut si aucune clé directe n'est définie" },
   { name: "OPENAI_API_KEY", label: "OpenAI (GPT)", usage: "Storyboards et analyses IA — prioritaire sur la passerelle" },
   { name: "OPENROUTER_API_KEY", label: "OpenRouter", usage: "Texte + vidéo — 2e dans la cascade vidéo ; pool de relais + modèles de secours" },
-  { name: "RUNWAY_API_KEY", label: "Runway Dev", usage: "Génération vidéo — 3e dans la cascade (après Google et OpenRouter)" },
+  { name: "RUNWAY_API_KEY", label: "Runway Dev", usage: "Génération vidéo — 3e dans la cascade" },
+  { name: "KLING_API_KEY", label: "Kling AI", usage: "Génération vidéo — 4e dans la cascade (api-singapore.klingai.com)" },
   { name: "GOOGLE_API_KEY", label: "Google (Gemini / Veo)", usage: "Vidéo Veo — 1er dans la cascade providers" },
 ] as const;
 type KeyName = (typeof KEYS)[number]["name"];
@@ -232,7 +234,7 @@ export const adminListKeys = createServerFn({ method: "GET" })
     });
   });
 
-const keyEnum = z.enum(["LOVABLE_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "RUNWAY_API_KEY", "GOOGLE_API_KEY"]);
+const keyEnum = z.enum(["LOVABLE_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "RUNWAY_API_KEY", "KLING_API_KEY", "GOOGLE_API_KEY"]);
 
 export const adminSetKey = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
@@ -264,9 +266,24 @@ export const adminTestKey = createServerFn({ method: "POST" })
     const { GATEWAY, GOOGLE_API, getGatewayConfig } = await import("./gateway.server");
     const cfg = await getGatewayConfig().catch(() => null);
     const name = data.name as KeyName;
-    const stored = name === "OPENAI_API_KEY" ? cfg?.openaiKey : name === "GOOGLE_API_KEY" ? cfg?.googleKey : name === "RUNWAY_API_KEY" ? cfg?.runwayKey : name === "OPENROUTER_API_KEY" ? cfg?.openrouterKey : cfg?.apiKey;
+    const stored =
+      name === "OPENAI_API_KEY"
+        ? cfg?.openaiKey
+        : name === "GOOGLE_API_KEY"
+          ? cfg?.googleKey
+          : name === "RUNWAY_API_KEY"
+            ? cfg?.runwayKey
+            : name === "KLING_API_KEY"
+              ? cfg?.klingKey
+              : name === "OPENROUTER_API_KEY"
+                ? cfg?.openrouterKey
+                : cfg?.apiKey;
     const key = data.value || stored;
     if (!key) return { ok: false, status: 0 };
+    if (name === "KLING_API_KEY") {
+      const { klingTestKey } = await import("./kling.server");
+      return klingTestKey(key);
+    }
     const res =
       name === "OPENAI_API_KEY"
         ? await fetch("https://api.openai.com/v1/models", { headers: { Authorization: `Bearer ${key}` } })
@@ -388,6 +405,8 @@ export const adminGetSettings = createServerFn({ method: "GET" })
       googleVideoModel: c.googleVideoModel,
       runwayVideoModel: c.runwayVideoModel,
       runwayConfigured: !!c.runwayKey,
+      klingVideoModel: c.klingVideoModel,
+      klingConfigured: !!c.klingKey,
       openrouterModel: c.openrouterModel,
       openrouterConfigured: !!c.openrouterKey,
       openrouterVideoModel: c.openrouterVideoModel,
@@ -413,6 +432,12 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
           .min(2)
           .max(60)
           .refine((id) => RUNWAY_MODEL_IDS.has(id), "Modèle Runway inconnu"),
+        klingVideoModel: z
+          .string()
+          .trim()
+          .min(2)
+          .max(60)
+          .refine((id) => KLING_MODEL_IDS.has(id), "Modèle Kling inconnu"),
         openrouterModel: z.string().trim().min(2).max(200),
         openrouterVideoModel: z.string().trim().max(200),
         maxDuration: z.number().int().min(5).max(60),
@@ -438,6 +463,7 @@ export const adminSaveSettings = createServerFn({ method: "POST" })
       { key: "openai_model", value: data.openaiModel },
       { key: "google_video_model", value: data.googleVideoModel },
       { key: "runway_video_model", value: data.runwayVideoModel },
+      { key: "kling_video_model", value: data.klingVideoModel },
       { key: "openrouter_model", value: data.openrouterModel },
       { key: "openrouter_video_model", value: data.openrouterVideoModel },
       { key: "max_duration", value: String(data.maxDuration) },

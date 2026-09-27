@@ -1,3 +1,5 @@
+import { DEFAULT_KLING_MODEL as DEFAULT_KLING_VIDEO_MODEL, DEFAULT_KLING_VIDEO_FALLBACKS } from "./kling-models";
+
 export const GATEWAY = "https://ai.gateway.lovable.dev/v1";
 export const GOOGLE_API = "https://generativelanguage.googleapis.com/v1beta";
 export const DEFAULT_VIDEO_MODEL = "google/gemini-omni-1.1-flash";
@@ -40,12 +42,14 @@ export const DEFAULT_RUNWAY_VIDEO_FALLBACKS = [
   "grok_imagine_1_5",
   "wan3",
 ];
+export { DEFAULT_KLING_VIDEO_MODEL, DEFAULT_KLING_VIDEO_FALLBACKS };
 
 export type GatewayConfig = {
   apiKey: string;
   openaiKey: string | null;
   googleKey: string | null;
   runwayKey: string | null;
+  klingKey: string | null;
   openrouterKey: string | null;
   openrouterKeys: string[];
   openrouterFallbackModels: string[];
@@ -54,6 +58,8 @@ export type GatewayConfig = {
   openrouterVideoModel: string;
   runwayVideoModel: string;
   runwayVideoFallbacks: string[];
+  klingVideoModel: string;
+  klingVideoFallbacks: string[];
   googleVideoFallbacks: string[];
   videoModel: string;
   textModel: string;
@@ -80,14 +86,15 @@ export async function getGatewayConfig(): Promise<GatewayConfig> {
   const openaiKey = c["OPENAI_API_KEY"] || process.env["OPENAI_API_KEY"] || null;
   const googleKey = c["GOOGLE_API_KEY"] || process.env["GOOGLE_API_KEY"] || null;
   const runwayKey = c["RUNWAY_API_KEY"] || process.env["RUNWAY_API_KEY"] || null;
+  const klingKey = c["KLING_API_KEY"] || process.env["KLING_API_KEY"] || null;
   const splitList = (v?: string) => (v ?? "").split(/[\s,]+/).map((x) => x.trim()).filter(Boolean);
   const openrouterKeys = [
     ...new Set([c["OPENROUTER_API_KEY"] || process.env["OPENROUTER_API_KEY"] || "", ...splitList(c["OPENROUTER_API_KEYS"])].filter(Boolean)),
   ].slice(0, 101);
   const openrouterKey = openrouterKeys[0] ?? null;
-  if (!apiKey && !openrouterKey && !openaiKey && !googleKey && !runwayKey) {
+  if (!apiKey && !openrouterKey && !openaiKey && !googleKey && !runwayKey && !klingKey) {
     throw new Error(
-      "Aucune clé IA configurée. Ouvrez Administration → Clés API (OpenRouter, Runway, Google ou Lovable), ou ajoutez LOVABLE_API_KEY / OPENROUTER_API_KEY / RUNWAY_API_KEY / GOOGLE_API_KEY dans Vercel.",
+      "Aucune clé IA configurée. Ouvrez Administration → Clés API (OpenRouter, Runway, Kling, Google ou Lovable), ou ajoutez les clés dans Vercel.",
     );
   }
   return {
@@ -95,6 +102,7 @@ export async function getGatewayConfig(): Promise<GatewayConfig> {
     openaiKey,
     googleKey,
     runwayKey,
+    klingKey,
     openrouterKey,
     openrouterKeys,
     openrouterFallbackModels: splitList(c["openrouter_fallback_models"]),
@@ -112,6 +120,12 @@ export async function getGatewayConfig(): Promise<GatewayConfig> {
       const configured = splitList(c["runway_video_fallbacks"]);
       if (configured.length) return configured;
       return runwayKey ? DEFAULT_RUNWAY_VIDEO_FALLBACKS : [];
+    })(),
+    klingVideoModel: c["kling_video_model"] || DEFAULT_KLING_VIDEO_MODEL,
+    klingVideoFallbacks: (() => {
+      const configured = splitList(c["kling_video_fallbacks"]);
+      if (configured.length) return configured;
+      return klingKey ? DEFAULT_KLING_VIDEO_FALLBACKS : [];
     })(),
     videoModel: c["video_model"] || DEFAULT_VIDEO_MODEL,
     textModel: c["text_model"] || DEFAULT_TEXT_MODEL,
