@@ -89,6 +89,14 @@ function describeRole(role: Role, index: number) {
   return `${who} is a real, photoreal ${gender.en} ${age.en} with ${tone.en}.`;
 }
 
+const FORMAT_FRAMING: Record<FormatId, string> = {
+  "16:9": "Compose for a widescreen 16:9 cinematic frame.",
+  "9:16": "Compose for a vertical 9:16 mobile frame, subject centered with headroom.",
+  "1:1": "Compose for a square 1:1 social frame, balanced centered subject.",
+  "21:9": "Compose for an ultra-wide 21:9 anamorphic scope frame with strong horizontal negative space.",
+  "4:5": "Compose for a 4:5 portrait social frame, slightly taller than square.",
+};
+
 export function buildPrompt(opts: {
   scene: string;
   roles: Role[];
@@ -112,6 +120,7 @@ export function buildPrompt(opts: {
   if (opts.hasReferenceImage) {
     parts.push("Use <IMAGE_REF_0> as the visual reference. Keep the subject's face, hair, clothing, colors and proportions unchanged.");
   }
+  parts.push(FORMAT_FRAMING[opts.format] ?? FORMAT_FRAMING["16:9"]);
   const camera = CAMERAS.find((item) => item.id === opts.camera)?.prompt ?? "locked-off camera";
   const style = VISUAL_STYLES.find((item) => item.id === opts.visualStyle)?.prompt ?? "premium cinematic feature-film color grading";
   parts.push(
@@ -128,10 +137,24 @@ export function buildPrompt(opts: {
   return parts.filter(Boolean).join(" ");
 }
 
-export function splitDuration(total: number) {
+/** Split a total duration into provider-safe segments (each between 5 and `maxSegment` seconds). */
+export function splitDuration(total: number, maxSegment = 10) {
+  const cap = Math.min(10, Math.max(5, Math.round(maxSegment)));
   const safeTotal = Math.min(60, Math.max(5, Math.round(total)));
-  const count = Math.ceil(safeTotal / 10);
+  if (safeTotal <= cap) return [safeTotal];
+  const count = Math.ceil(safeTotal / cap);
   const base = Math.floor(safeTotal / count);
   const extra = safeTotal % count;
-  return Array.from({ length: count }, (_, index) => base + (index < extra ? 1 : 0));
+  const segs = Array.from({ length: count }, (_, index) => base + (index < extra ? 1 : 0));
+  const fixed: number[] = [];
+  for (const seg of segs) {
+    if (seg >= 5) {
+      fixed.push(Math.min(cap, seg));
+    } else if (fixed.length && fixed[fixed.length - 1]! + seg <= cap) {
+      fixed[fixed.length - 1]! += seg;
+    } else {
+      fixed.push(5);
+    }
+  }
+  return fixed;
 }

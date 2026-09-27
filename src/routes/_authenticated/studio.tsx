@@ -92,6 +92,13 @@ function Studio() {
   const [aiConfigured, setAiConfigured] = useState(true);
   const [generationEnabled, setGenerationEnabled] = useState(true);
   const [quotaLabel, setQuotaLabel] = useState<string | null>(null);
+  const [maxDuration, setMaxDuration] = useState(10);
+  const [allowedResolutions, setAllowedResolutions] = useState<ResolutionId[]>([
+    "360p",
+    "720p",
+    "1080p",
+    "4k",
+  ]);
   const [scene, setScene] = useState(
     search.scene ??
       "Une femme de 35 ans marche dans une rue de Lyon au crépuscule, plan moyen qui glisse latéralement, ambiance contemplative.",
@@ -179,12 +186,23 @@ function Studio() {
       setAiConfigured(true);
       setGenerationEnabled(true);
       setQuotaLabel(null);
+      setMaxDuration(10);
+      setAllowedResolutions(["360p", "720p", "1080p", "4k"]);
       return;
     }
     loadLimits()
       .then((limits) => {
         setAiConfigured(limits.aiConfigured !== false);
         setGenerationEnabled(limits.generationEnabled !== false);
+        const maxDur = Math.min(10, Math.max(5, limits.maxDuration ?? 10));
+        setMaxDuration(maxDur);
+        const allowed = (limits.allowedResolutions ?? []).filter((r): r is ResolutionId =>
+          RESOLUTIONS.some((o) => o.id === r),
+        );
+        if (allowed.length) {
+          setAllowedResolutions(allowed);
+          setResolution((cur) => (allowed.includes(cur) ? cur : allowed[0]!));
+        }
         const used = (limits as { clipsUsedToday?: number }).clipsUsedToday ?? 0;
         const cap = limits.dailyClipLimit;
         if (cap > 0) setQuotaLabel(`${used} / ${cap} clips aujourd'hui`);
@@ -223,7 +241,7 @@ function Studio() {
   function buildShots(variant = 0): QueuedShot[] {
     const conf = FORMATS.find((f) => f.id === format);
     if (!conf) return [];
-    const segments = splitDuration(duration);
+    const segments = splitDuration(duration, maxDuration);
     const variation =
       variants > 1
         ? ` Variation ${variant + 1} of ${variants}: give a distinct interpretation with different framing, composition and blocking.`
@@ -396,7 +414,9 @@ function Studio() {
   }
 
   const activeClip = clips.find((c) => c.id === activeId) ?? null;
-  const previewFormat = FORMATS.find((f) => f.id === (activeClip?.format ?? format))!;
+  const composerFormat = FORMATS.find((f) => f.id === format) ?? FORMATS[0]!;
+  const previewFormat =
+    FORMATS.find((f) => f.id === (activeClip?.format ?? format)) ?? composerFormat;
 
   return (
     <main className="mx-auto max-w-[1440px] px-4 py-6 sm:px-6 lg:px-8">
@@ -591,7 +611,7 @@ function Studio() {
               </div>
               <div className="mt-3 flex flex-wrap gap-1.5">
                 <span className="rounded-full bg-primary/15 px-2.5 py-1 text-[11px] font-medium text-primary-deep">
-                  {previewFormat.id}
+                  {composerFormat.id}
                 </span>
                 <span className="rounded-full bg-white/5 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
                   {duration}s
@@ -787,7 +807,7 @@ function Studio() {
                   <span className="font-mono text-[10px] text-primary-deep">{resolution}</span>
                 </div>
                 <div className="mt-2 grid grid-cols-2 gap-2">
-                  {RESOLUTIONS.map((option) => (
+                  {RESOLUTIONS.filter((option) => allowedResolutions.includes(option.id)).map((option) => (
                     <button
                       key={option.id}
                       type="button"
@@ -836,9 +856,15 @@ function Studio() {
                   onChange={(event) => setDuration(Number(event.target.value))}
                   className="mt-3 h-1.5 w-full cursor-pointer accent-primary"
                 />
-                <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">
-                  {splitDuration(duration).length} plan{splitDuration(duration).length > 1 ? "s" : ""} généré{splitDuration(duration).length > 1 ? "s" : ""} successivement.
-                </p>
+                {(() => {
+                  const plans = splitDuration(duration, maxDuration).length;
+                  return (
+                    <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">
+                      {plans} plan{plans > 1 ? "s" : ""} généré{plans > 1 ? "s" : ""} successivement
+                      {maxDuration < 10 ? ` (max ${maxDuration}s / plan)` : ""}.
+                    </p>
+                  );
+                })()}
               </div>
               <div className="mt-4">
                 <Dial label="Lumière" value={light} min={0} max={100} step={1} suffix="%" onChange={setLight} />
